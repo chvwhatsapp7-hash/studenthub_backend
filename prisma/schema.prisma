@@ -74,3 +74,33 @@ model Course {
   created_at DateTime @default(now())
 
 }
+
+model Internship {
+  internship_id Int @id @default(autoincrement())
+
+  title String @db.VarChar(255)
+  company_name String @db.VarChar(255)
+  location String @db.VarChar(255)
+
+  duration Int
+  stipend Int
+
+  description String
+
+  created_at DateTime @default(now())
+}
+
+model Hackathon {
+  hackathon_id Int @id @default(autoincrement())
+
+  title String @db.VarChar(255)
+  organizer String @db.VarChar(255)
+  location String @db.VarChar(255)
+
+  start_date DateTime
+  end_date DateTime
+
+  description String
+
+  created_at DateTime @default(now())
+}
