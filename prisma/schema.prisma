@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -14,93 +8,194 @@ datasource db {
 }
 
 model Role {
-  
-  role_id Int @id @default(autoincrement())
+  role_id   Int    @id @default(autoincrement())
   role_name String @db.VarChar(255)
+
   users     User[]
 }
 
 model User {
-  user_id    BigInt   @id @default(autoincrement())
-  name       String   @db.VarChar(255)
-  email      String   @unique @db.VarChar(255)
-  password   String
-  age        Int
-  school     String  @db.VarChar(255)
-  college    String  @db.VarChar(255)
-  interests  String
-  role_id    Int
-  role       Role     @relation(fields: [role_id], references: [role_id])
-  created_at DateTime @default(now())
-}
+  user_id        BigInt   @id @default(autoincrement())
+  full_name      String   @db.VarChar(255)
+  email          String   @unique @db.VarChar(255)
+  password_hash  String
+  phone          String?  @db.VarChar(20)
 
-model Job {
+  university     String?  @db.VarChar(255)
+  degree         String?  @db.VarChar(255)
+  graduation_year Int?
 
-  job_id Int @id @default(autoincrement())
+  resume_url     String?
+  linkedin_url   String?
+  github_url     String?
 
-  title String @db.VarChar(255)
-  company_name String @db.VarChar(255)
-  location String @db.VarChar(255)
+  role_id        Int
+  role           Role     @relation(fields: [role_id], references: [role_id])
 
-  description String
+  applications   Application[]
+  enrollments    CourseEnrollment[]
+  hackathons     HackathonParticipant[]
 
-  created_at DateTime @default(now())
-
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
 }
 
 model Company {
+  company_id   Int    @id @default(autoincrement())
+  name         String @db.VarChar(255)
+  description  String
+  industry     String? @db.VarChar(255)
+  website      String?
+  logo_url     String?
+  location     String  @db.VarChar(255)
+  company_size String? @db.VarChar(50)
+  founded_year Int?
 
-  company_id Int @id @default(autoincrement())
+  jobs         Job[]
+  internships  Internship[]
 
-  name String @db.VarChar(255)
-  location String @db.VarChar(255)
-
-  description String
-
-  created_at DateTime @default(now())
-
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
 }
 
-model Course {
+model Job {
+  job_id        Int    @id @default(autoincrement())
 
-  course_id Int @id @default(autoincrement())
+  company_id    Int
+  company       Company @relation(fields: [company_id], references: [company_id])
 
-  title String @db.VarChar(255)
+  title         String @db.VarChar(255)
+  description   String
+  location      String @db.VarChar(255)
 
-  duration Int
+  job_type      String? @db.VarChar(50)
+  salary_min    Int?
+  salary_max    Int?
+  experience_level String? @db.VarChar(50)
 
-  description String
+  application_deadline DateTime?
+  apply_url     String?
 
-  created_at DateTime @default(now())
+  applications  Application[]
 
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
 }
 
 model Internship {
   internship_id Int @id @default(autoincrement())
 
-  title String @db.VarChar(255)
-  company_name String @db.VarChar(255)
-  location String @db.VarChar(255)
+  company_id    Int
+  company       Company @relation(fields: [company_id], references: [company_id])
 
-  duration Int
-  stipend Int
+  title         String @db.VarChar(255)
+  description   String
+  location      String @db.VarChar(255)
 
-  description String
+  stipend       Int?
+  duration      String?
 
-  created_at DateTime @default(now())
+  internship_type String? @db.VarChar(50)
+  start_date    DateTime?
+  application_deadline DateTime?
+
+  apply_url     String?
+
+  applications  Application[]
+
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+}
+
+model Course {
+  course_id    Int @id @default(autoincrement())
+
+  title        String @db.VarChar(255)
+  description  String
+
+  provider     String?
+  instructor   String?
+
+  category     String? @db.VarChar(100)
+  level        String? @db.VarChar(50)
+
+  duration     String?
+  course_url   String?
+
+  price        Int?
+  rating       Float?
+
+  enrollments  CourseEnrollment[]
+
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
 }
 
 model Hackathon {
   hackathon_id Int @id @default(autoincrement())
 
-  title String @db.VarChar(255)
-  organizer String @db.VarChar(255)
-  location String @db.VarChar(255)
+  title        String @db.VarChar(255)
+  description  String
 
-  start_date DateTime
-  end_date DateTime
+  organizer    String @db.VarChar(255)
+  location     String @db.VarChar(255)
 
-  description String
+  start_date   DateTime
+  end_date     DateTime
+  registration_deadline DateTime?
 
-  created_at DateTime @default(now())
+  prize_pool   Int?
+  mode         String? @db.VarChar(50)
+
+  event_url    String?
+
+  participants HackathonParticipant[]
+
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+}
+
+model Application {
+  id            Int @id @default(autoincrement())
+
+  user_id       BigInt
+  user          User @relation(fields: [user_id], references: [user_id])
+
+  job_id        Int?
+  job           Job? @relation(fields: [job_id], references: [job_id])
+
+  internship_id Int?
+  internship    Internship? @relation(fields: [internship_id], references: [internship_id])
+
+  status        String? @db.VarChar(50)
+
+  applied_at    DateTime @default(now())
+}
+
+model CourseEnrollment {
+  id            Int @id @default(autoincrement())
+
+  user_id       BigInt
+  course_id     Int
+
+  user          User   @relation(fields: [user_id], references: [user_id])
+  course        Course @relation(fields: [course_id], references: [course_id])
+
+  completion_status String? @db.VarChar(50)
+
+  enrollment_date DateTime @default(now())
+}
+
+model HackathonParticipant {
+  id            Int @id @default(autoincrement())
+
+  user_id       BigInt
+  hackathon_id  Int
+
+  user          User      @relation(fields: [user_id], references: [user_id])
+  hackathon     Hackathon @relation(fields: [hackathon_id], references: [hackathon_id])
+
+  team_name     String? @db.VarChar(255)
+
+  registration_date DateTime @default(now())
 }

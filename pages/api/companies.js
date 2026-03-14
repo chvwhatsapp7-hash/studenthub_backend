@@ -8,23 +8,33 @@ export default async function handler(req, res){
     if(req.method === "POST"){
 
       const {
-        name,
-        location,
-        description
-      } = req.body;
+  name,
+  description,
+  industry,
+  website,
+  logo_url,
+  location,
+  company_size,
+  founded_year
+} = req.body;
 
       const query = `
-        INSERT INTO "Company"
-        (name, location, description)
-        VALUES ($1,$2,$3)
-        RETURNING *
-      `;
+INSERT INTO "Company"
+(name,description,industry,website,logo_url,location,company_size,founded_year,created_at,updated_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW(),NOW())
+RETURNING *
+`;
 
       const values = [
-        name,
-        location,
-        description
-      ];
+  name,
+  description,
+  industry,
+  website,
+  logo_url,
+  location,
+  company_size,
+  founded_year
+];
 
       const result = await pool.query(query, values);
 
