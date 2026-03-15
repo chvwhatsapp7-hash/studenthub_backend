@@ -6,28 +6,29 @@ export default async function handler(req,res){
 
     if(req.method === "POST"){
 
-      const {
-        title,
-        company_id,
-        location,
-        duration,
-        stipend,
-        description
-      } = req.body;
+  const {
+    title,
+    company_id,
+    location,
+    duration,
+    stipend,
+    description
+  } = req.body;
 
-      const result = await pool.query(`
-        INSERT INTO "Internship"
-        (title,company_id,location,duration,stipend,description)
-        VALUES ($1,$2,$3,$4,$5,$6)
-        RETURNING *
-      `,[title,company_id,location,duration,stipend,description]);
+  const result = await pool.query(`
+    INSERT INTO "Internship"
+    (title,company_id,location,duration,stipend,description,created_at,updated_at)
+    VALUES ($1,$2,$3,$4,$5,$6,NOW(),NOW())
+    RETURNING *
+  `,[title,company_id,location,duration,stipend,description]);
 
-      return res.status(201).json({
-        success:true,
-        data:result.rows[0]
-      });
+  return res.status(201).json({
+    success:true,
+    data:result.rows[0]
+  });
 
-    }
+}
+
 
     else if(req.method === "GET"){
 

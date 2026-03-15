@@ -8,13 +8,13 @@ export default async function handler(req, res){
     if(req.method === "POST"){
 
       const {
-        title,
-        organizer,
-        location,
-        start_date,
-        end_date,
-        description
-      } = req.body;
+  title,
+  organizer,
+  location,
+  start_date,
+  end_date,
+  description
+} = req.body;
 
       const query = `
         INSERT INTO "Hackathon"
@@ -32,7 +32,12 @@ export default async function handler(req, res){
         description
       ];
 
-      const result = await pool.query(query, values);
+      const result = await pool.query(`
+  INSERT INTO "Hackathon"
+  (title, organizer, location, start_date, end_date, description, created_at, updated_at)
+  VALUES ($1,$2,$3,$4,$5,$6,NOW(),NOW())
+  RETURNING *
+`,[title,organizer,location,start_date,end_date,description]);
 
       return res.status(201).json({
         success: true,

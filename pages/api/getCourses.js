@@ -8,23 +8,37 @@ export default async function handler(req, res){
     if(req.method === "POST"){
 
       const {
-        title,
-        duration,
-        description
-      } = req.body;
+  title,
+  description,
+  provider,
+  instructor,
+  category,
+  level,
+  duration,
+  course_url,
+  price,
+  rating
+} = req.body;
 
       const query = `
-        INSERT INTO "Course"
-        (title, duration, description)
-        VALUES ($1,$2,$3)
-        RETURNING *
-      `;
+INSERT INTO "Course"
+(title,description,provider,instructor,category,level,duration,course_url,price,rating,created_at,updated_at)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW(),NOW())
+RETURNING *
+`;
 
       const values = [
-        title,
-        duration,
-        description
-      ];
+  title,
+  description,
+  provider,
+  instructor,
+  category,
+  level,
+  duration,
+  course_url,
+  price,
+  rating
+];
 
       const result = await pool.query(query, values);
 
