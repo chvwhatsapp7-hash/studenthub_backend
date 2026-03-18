@@ -20,19 +20,10 @@ export default async function handler(req, res) {
       resume_url,
       linkedin_url,
       github_url,
-      age,
-      //user_type
+      age
     } = req.body;
 
-    // 🔐 Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
-
-
-    // if (age < 18) {
-    //   user_type = "junior";
-    // } else {
-    //   user_type = "senior";
-    // }
 
     const query = `
       INSERT INTO "User"
