@@ -20,20 +20,19 @@ export default async function handler(req, res) {
       resume_url,
       linkedin_url,
       github_url,
-      age   // 👈 ADD THIS
+      age,
+      //user_type
     } = req.body;
 
     // 🔐 Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // 🎯 Decide user type
-    let user_type;
 
-    if (age < 18) {
-      user_type = "junior";
-    } else {
-      user_type = "senior";
-    }
+    // if (age < 18) {
+    //   user_type = "junior";
+    // } else {
+    //   user_type = "senior";
+    // }
 
     const query = `
       INSERT INTO "User"
@@ -53,7 +52,7 @@ export default async function handler(req, res) {
       resume_url,
       linkedin_url,
       github_url,
-      user_type,  // 👈 ADD THIS
+      //user_type,  // 👈 ADD THIS
       1           // student role
     ];
 
