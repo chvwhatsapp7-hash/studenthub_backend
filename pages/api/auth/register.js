@@ -42,20 +42,19 @@ export default async function handler(req, res) {
     `;
 
     const values = [
-      full_name,
-      email,
-      hashedPassword,
-      phone,
-      university,
-      degree,
-      graduation_year,
-      resume_url,
-      linkedin_url,
-      github_url,
-      age
-      //user_type,  // 👈 ADD THIS
-           // student role
-    ];
+  full_name,
+  email,
+  hashedPassword,
+  phone,
+  university,
+  degree,
+  graduation_year,
+  resume_url,
+  linkedin_url,
+  github_url,
+  age,
+  1 // role_id (student)
+];
 
     const result = await pool.query(query, values);
 
