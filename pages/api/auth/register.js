@@ -8,7 +8,6 @@ export default async function handler(req, res) {
   }
 
   try {
-
     const {
       full_name,
       email,
@@ -23,6 +22,10 @@ export default async function handler(req, res) {
       age
     } = req.body;
 
+    if (!full_name || !email || !password || age === undefined) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const query = `
@@ -33,37 +36,30 @@ export default async function handler(req, res) {
     `;
 
     const values = [
-  full_name,
-  email,
-  hashedPassword,
-  phone,
-  university,
-  degree,
-  graduation_year,
-  resume_url,
-  linkedin_url,
-  github_url,
-  age,
-  1 // role_id (student)
-];
+      full_name,
+      email,
+      hashedPassword,
+      phone,
+      university,
+      degree,
+      graduation_year,
+      resume_url,
+      linkedin_url,
+      github_url,
+      age,
+      1 // student role
+    ];
 
     const result = await pool.query(query, values);
 
     res.status(201).json({
       success: true,
       message: "User created successfully",
-      user_type: user_type,
       data: result.rows[0]
     });
 
   } catch (err) {
-
     console.error(err);
-
-    res.status(500).json({
-      message: err.message
-    });
-
+    res.status(500).json({ message: err.message });
   }
-
 }
