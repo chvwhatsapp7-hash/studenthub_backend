@@ -19,7 +19,8 @@ export default async function handler(req, res) {
   resume_url = null,
   linkedin_url = null,
   github_url = null,
-  age = null
+  age = null,
+  role_id=1
 } = req.body;
 
     if (!full_name || !email || !password || age === undefined) {
