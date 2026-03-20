@@ -22,7 +22,7 @@ export default async function handler(req, res) {
       linkedin_url = null,
       github_url = null,
       age,
-      role_id = 1 // default role
+      role_id = 2 // default role
     } = req.body;
 
     // ✅ Validation
