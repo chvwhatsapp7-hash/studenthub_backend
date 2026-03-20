@@ -8,19 +8,19 @@ export default async function handler(req, res) {
   }
 
   try {
-    const {
-      full_name,
-      email,
-      password,
-      phone,
-      university,
-      degree,
-      graduation_year,
-      resume_url,
-      linkedin_url,
-      github_url,
-      age
-    } = req.body;
+   const {
+  full_name,
+  email,
+  password,
+  phone = null,
+  university = null,
+  degree = null,
+  graduation_year = null,
+  resume_url = null,
+  linkedin_url = null,
+  github_url = null,
+  age = null
+} = req.body;
 
     if (!full_name || !email || !password || age === undefined) {
       return res.status(400).json({ message: "Missing required fields" });
