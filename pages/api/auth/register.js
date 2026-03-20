@@ -48,9 +48,9 @@ export default async function handler(req, res) {
 
     // ✅ Check if role exists (VERY IMPORTANT)
     const roleCheck = await pool.query(
-      `SELECT * FROM "Role" WHERE role_id = $1`,
-      [role_id]
-    );
+  `SELECT * FROM "Role" WHERE role_id = $1`,
+  [role_id]
+);
 
     if (roleCheck.rows.length === 0) {
       return res.status(400).json({
