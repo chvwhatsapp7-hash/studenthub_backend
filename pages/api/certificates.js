@@ -7,9 +7,9 @@ export default async function handler(req, res) {
     if (req.method === "POST") {
       const { user_id, title, issuer, issue_date, file_url } = req.body;
 
-      if (!user_id || !title || !issuer || !file_url) {
+      if (!user_id || !title || !issuer) {
         return res.status(400).json({
-          message: "user_id, title, issuer, and file_url are required"
+          message: "user_id, title, issuer are required"
         });
       }
 
@@ -18,7 +18,7 @@ export default async function handler(req, res) {
          (user_id, title, issuer, issue_date, file_url, created_at)
          VALUES ($1,$2,$3,$4,$5,NOW())
          RETURNING *`,
-        [user_id, title, issuer, issue_date || null, file_url]
+        [user_id, title, issuer, issue_date || null, file_url||null]
       );
 
       return res.status(201).json({
