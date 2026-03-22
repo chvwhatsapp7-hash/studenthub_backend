@@ -4,7 +4,7 @@ export default async function handler(req, res){
 
   try{
 
-    // -------------------- CREATE HACKATHON --------------------
+    
     if(req.method === "POST"){
 
       const {
@@ -47,7 +47,7 @@ export default async function handler(req, res){
 
     }
 
-    // -------------------- GET HACKATHONS --------------------
+    
     else if(req.method === "GET"){
 
       const query = `
@@ -64,7 +64,7 @@ export default async function handler(req, res){
 
     }
 
-    // -------------------- UPDATE HACKATHON --------------------
+    
     else if(req.method === "PUT"){
 
       const {
@@ -109,7 +109,8 @@ export default async function handler(req, res){
 
     }
 
-    // -------------------- DELETE HACKATHON --------------------
+
+    
     else if(req.method === "DELETE"){
 
       const { hackathon_id } = req.body;
@@ -130,7 +131,7 @@ export default async function handler(req, res){
 
     }
 
-    // -------------------- INVALID METHOD --------------------
+    
     else{
 
       return res.status(405).json({

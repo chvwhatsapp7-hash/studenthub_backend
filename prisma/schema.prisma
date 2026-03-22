@@ -45,6 +45,8 @@ model Job {
   updated_at           DateTime      @updatedAt
   applications         Application[]
   company              Company       @relation(fields: [company_id], references: [company_id])
+
+  jobSkills  JobSkill[]
 }
 
 model Internship {
@@ -63,6 +65,8 @@ model Internship {
   updated_at           DateTime      @updatedAt
   applications         Application[]
   company              Company       @relation(fields: [company_id], references: [company_id])
+
+  internshipSkills InternshipSkill[]
 }
 
 model Course {
@@ -119,6 +123,8 @@ model User {
   courseEnrollments       CourseEnrollment[]
   hackathonParticipations HackathonParticipant[]
   role                    Role                   @relation(fields: [role_id], references: [role_id])
+
+  userSkills UserSkill[]
 }
 
 model CourseEnrollment {
@@ -151,4 +157,46 @@ model Application {
   internship    Internship? @relation(fields: [internship_id], references: [internship_id])
   job           Job?        @relation(fields: [job_id], references: [job_id])
   user          User        @relation(fields: [user_id], references: [user_id])
+}
+
+model Skill {
+  skill_id Int @id @default(autoincrement())
+  name     String @unique
+
+  userSkills UserSkill[]
+  jobSkills  JobSkill[]
+  internshipSkills InternshipSkill[]
+}
+
+model UserSkill {
+  id        Int @id @default(autoincrement())
+
+  user_id   BigInt
+  skill_id  Int
+
+  user      User  @relation(fields: [user_id], references: [user_id])
+  skill     Skill @relation(fields: [skill_id], references: [skill_id])
+
+}
+
+model JobSkill {
+  id       Int @id @default(autoincrement())
+
+  job_id   Int
+  skill_id Int
+
+  job      Job   @relation(fields: [job_id], references: [job_id])
+  skill    Skill @relation(fields: [skill_id], references: [skill_id])
+
+}
+
+model InternshipSkill {
+  id            Int @id @default(autoincrement())
+
+  internship_id Int
+  skill_id      Int
+
+  internship    Internship @relation(fields: [internship_id], references: [internship_id])
+  skill         Skill      @relation(fields: [skill_id], references: [skill_id])
+
 }

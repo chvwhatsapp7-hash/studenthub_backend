@@ -4,7 +4,7 @@ export default async function handler(req, res){
 
   try{
 
-    // -------------------- CREATE COMPANY --------------------
+
     if(req.method === "POST"){
 
       const {
@@ -46,7 +46,7 @@ RETURNING *
 
     }
 
-    // -------------------- GET COMPANIES --------------------
+
     else if(req.method === "GET"){
 
       const query = `
@@ -63,7 +63,7 @@ RETURNING *
 
     }
 
-    // -------------------- UPDATE COMPANY --------------------
+
     else if(req.method === "PUT"){
 
       const {
@@ -99,7 +99,7 @@ RETURNING *
 
     }
 
-    // -------------------- DELETE COMPANY --------------------
+
     else if(req.method === "DELETE"){
 
       const { company_id } = req.body;
@@ -120,7 +120,7 @@ RETURNING *
 
     }
 
-    // -------------------- INVALID METHOD --------------------
+    
     else{
 
       return res.status(405).json({

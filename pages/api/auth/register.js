@@ -3,13 +3,12 @@ import pool from "../../../lib/db";
 
 export default async function handler(req, res) {
 
-  // ✅ Allow only POST
   if (req.method !== "POST") {
     return res.status(405).json({ message: "Only POST allowed" });
   }
 
   try {
-    // ✅ Destructure request body
+    
     const {
       full_name,
       email,
@@ -22,10 +21,10 @@ export default async function handler(req, res) {
       linkedin_url = null,
       github_url = null,
       age,
-      role_id// default role
+      role_id
     } = req.body;
 
-    // ✅ Validation
+
     if (!full_name || !email || !password || age === undefined) {
       return res.status(400).json({
         success: false,
@@ -33,7 +32,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // ✅ Check if email already exists
+  
     const emailCheck = await pool.query(
       `SELECT * FROM "User" WHERE email = $1`,
       [email]
@@ -46,7 +45,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // ✅ Check if role exists (VERY IMPORTANT)
+    
     const roleCheck = await pool.query(
   `SELECT * FROM "Role" WHERE role_id = $1`,
   [role_id]
@@ -59,10 +58,10 @@ export default async function handler(req, res) {
       });
     }
 
-    // ✅ Hash password
+    
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // ✅ Insert user
+  
     const query = `
       INSERT INTO "User"
       (
@@ -105,7 +104,7 @@ export default async function handler(req, res) {
 
     const result = await pool.query(query, values);
 
-    // ✅ Success response
+   
     return res.status(201).json({
       success: true,
       message: "User created successfully",
