@@ -1,4 +1,4 @@
-import pool from "../../lib/db";
+import {pool} from "../../lib/database";
 
 export default async function handler(req, res) {
 
