@@ -17,15 +17,20 @@ export default async function handler(req, res) {
 
       const query = `
         SELECT 
-          a.*,
-          j.title AS job_title,
-          i.title AS internship_title
-        FROM "Application" a
-        LEFT JOIN "Job" j ON a.job_id = j.id
-        LEFT JOIN "Internship" i ON a.internship_id = i.id
-        WHERE a.user_id = $1
-        ORDER BY a.applied_at DESC
-      `;
+        a.job_id,
+        j.title AS job_title,
+        a.internship_id,
+        i.title AS internship_title
+      
+      FROM "Application" a
+      
+      LEFT JOIN "Job" j 
+        ON a.job_id = j.job_id
+      
+      LEFT JOIN "Internship" i 
+        ON a.internship_id = i.internship_id
+      
+      WHERE a.user_id = $1`;
 
       const result = await pool.query(query, [user_id]);
 
