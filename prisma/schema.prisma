@@ -124,7 +124,14 @@ model User {
   hackathonParticipations HackathonParticipant[]
   role                    Role                   @relation(fields: [role_id], references: [role_id])
 
-  userSkills UserSkill[]
+  
+  about_me   String?
+  address    String?  @db.VarChar(255)
+
+  userSkills          UserSkill[]
+  projects            Project[]
+  certificates        Certificate[]
+
 }
 
 model CourseEnrollment {
@@ -166,6 +173,7 @@ model Skill {
   userSkills UserSkill[]
   jobSkills  JobSkill[]
   internshipSkills InternshipSkill[]
+  projectSkills ProjectSkill[]
 }
 
 model UserSkill {
@@ -174,9 +182,12 @@ model UserSkill {
   user_id   BigInt
   skill_id  Int
 
+  proficiency Int
+
   user      User  @relation(fields: [user_id], references: [user_id])
   skill     Skill @relation(fields: [skill_id], references: [skill_id])
 
+  @@unique([user_id, skill_id])
 }
 
 model JobSkill {
@@ -199,4 +210,49 @@ model InternshipSkill {
   internship    Internship @relation(fields: [internship_id], references: [internship_id])
   skill         Skill      @relation(fields: [skill_id], references: [skill_id])
 
+}
+
+model Certificate {
+  certificate_id Int @id @default(autoincrement())
+
+  user_id        BigInt
+
+  title          String @db.VarChar(255)
+  issuer         String @db.VarChar(255)
+  issue_date     DateTime?
+
+  file_url       String?  
+
+  user           User @relation(fields: [user_id], references: [user_id])
+
+  created_at     DateTime @default(now())
+}
+
+model Project {
+  project_id   Int @id @default(autoincrement())
+
+  user_id      BigInt
+
+  title        String @db.VarChar(255)
+  description  String
+
+  user         User @relation(fields: [user_id], references: [user_id])
+
+  projectSkills ProjectSkill[]
+
+  created_at   DateTime @default(now())
+}
+
+model ProjectSkill {
+  id         Int @id @default(autoincrement())
+
+  project_id Int
+  skill_id   Int?
+
+  custom_skill String?
+
+  project    Project @relation(fields: [project_id], references: [project_id])
+  skill      Skill?  @relation(fields: [skill_id], references: [skill_id])
+
+  @@unique([project_id, skill_id, custom_skill])
 }
