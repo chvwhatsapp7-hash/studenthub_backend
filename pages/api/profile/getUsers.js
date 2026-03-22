@@ -18,11 +18,10 @@ export default async function handler(req, res) {
 
       // ✅ USER DETAILS + ROLE
       const userQuery = `
-        SELECT u.*, r.role_id, r.name AS role_name
+        SELECT u.*, r.role_id, r.role_name AS role_name
         FROM "User" u
         JOIN "Role" r ON u.role_id = r.role_id
-        WHERE u.user_id = $1
-      `;
+        WHERE u.user_id = $1`;
 
       const userResult = await pool.query(userQuery, [user_id]);
 
