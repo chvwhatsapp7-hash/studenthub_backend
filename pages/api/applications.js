@@ -1,12 +1,52 @@
 import pool from "../../lib/db";
 
 export default async function handler(req, res) {
-
   try {
 
+    // ─────────────────────────────────────────────
+    // ✅ GET → FETCH USER APPLICATIONS
+    // ─────────────────────────────────────────────
+    if (req.method === "GET") {
+      const { user_id } = req.query;
+
+      if (!user_id) {
+        return res.status(400).json({
+          message: "user_id is required"
+        });
+      }
+
+      const query = `
+        SELECT 
+        a.job_id,
+        j.title AS job_title,
+        a.internship_id,
+        i.title AS internship_title
+      
+      FROM "Application" a
+      
+      LEFT JOIN "Job" j 
+        ON a.job_id = j.job_id
+      
+      LEFT JOIN "Internship" i 
+        ON a.internship_id = i.internship_id
+      
+      WHERE a.user_id = $1`;
+
+      const result = await pool.query(query, [user_id]);
+
+      return res.status(200).json({
+        success: true,
+        data: result.rows
+      });
+    }
+
+    // ─────────────────────────────────────────────
+    // ✅ POST → APPLY
+    // ─────────────────────────────────────────────
     if (req.method === "POST") {
 
       const { user_id, job_id, internship_id } = req.body;
+
       if (!user_id || (!job_id && !internship_id)) {
         return res.status(400).json({
           message: "user_id and (job_id OR internship_id) are required"
@@ -54,6 +94,9 @@ export default async function handler(req, res) {
       });
     }
 
+    // ─────────────────────────────────────────────
+    // ✅ DELETE → WITHDRAW
+    // ─────────────────────────────────────────────
     if (req.method === "DELETE") {
 
       const { user_id, job_id, internship_id } = req.body;
@@ -92,11 +135,15 @@ export default async function handler(req, res) {
       });
     }
 
-    return res.status(405).json({ message: "Method not allowed" });
+    // ─────────────────────────────────────────────
+    // ❌ METHOD NOT ALLOWED
+    // ─────────────────────────────────────────────
+    return res.status(405).json({
+      message: "Method not allowed"
+    });
 
   } catch (err) {
-
-    console.error(err);
+    console.error("API ERROR:", err);
 
     return res.status(500).json({
       message: err.message
