@@ -1,12 +1,9 @@
 import { pool } from "../../../lib/database";
 
 export default async function handler(req, res) {
-
   try {
-
     // -------------------- GET USER BY ID --------------------
     if (req.method === "GET") {
-
       const { user_id } = req.query;
 
       if (!user_id) {
@@ -34,28 +31,22 @@ export default async function handler(req, res) {
 
       const user = userResult.rows[0];
 
-      // ✅ APPLICATIONS (JOB + INTERNSHIP + COMPANY)
+      // ✅ APPLICATIONS
       const applicationQuery = `
         SELECT 
           a.*,
-
           j.job_id, j.title AS job_title, j.location AS job_location,
           jc.name AS job_company_name,
-
           i.internship_id, i.title AS internship_title, i.location AS internship_location,
           ic.name AS internship_company_name
-
         FROM "Application" a
         LEFT JOIN "Job" j ON a.job_id = j.job_id
         LEFT JOIN "Company" jc ON j.company_id = jc.company_id
-
         LEFT JOIN "Internship" i ON a.internship_id = i.internship_id
         LEFT JOIN "Company" ic ON i.company_id = ic.company_id
-
         WHERE a.user_id = $1
         ORDER BY a.applied_at DESC
       `;
-
       const applicationResult = await pool.query(applicationQuery, [user_id]);
 
       // ✅ COURSES ENROLLED
@@ -68,7 +59,6 @@ export default async function handler(req, res) {
         WHERE ce.user_id = $1
         ORDER BY ce.enrollment_date DESC
       `;
-
       const courseResult = await pool.query(courseQuery, [user_id]);
 
       // ✅ HACKATHONS
@@ -81,8 +71,25 @@ export default async function handler(req, res) {
         WHERE hp.user_id = $1
         ORDER BY hp.registration_date DESC
       `;
-
       const hackathonResult = await pool.query(hackathonQuery, [user_id]);
+
+      // ✅ CERTIFICATES
+      const certificateQuery = `
+        SELECT certificate_id, title, issuer, issue_date, file_url, created_at
+        FROM "Certificate"
+        WHERE user_id = $1
+        ORDER BY created_at DESC
+      `;
+      const certificateResult = await pool.query(certificateQuery, [user_id]);
+
+      // ✅ PROJECTS
+      const projectQuery = `
+        SELECT project_id, title, description, created_at
+        FROM "Project"
+        WHERE user_id = $1
+        ORDER BY created_at DESC
+      `;
+      const projectResult = await pool.query(projectQuery, [user_id]);
 
       // ✅ FINAL RESPONSE
       return res.status(200).json({
@@ -91,10 +98,11 @@ export default async function handler(req, res) {
           user,
           applications: applicationResult.rows,
           courses: courseResult.rows,
-          hackathons: hackathonResult.rows
+          hackathons: hackathonResult.rows,
+          certificates: certificateResult.rows,
+          projects: projectResult.rows, // added projects
         }
       });
-
     }
 
     // -------------------- INVALID METHOD --------------------
@@ -103,16 +111,11 @@ export default async function handler(req, res) {
         message: "Method not allowed"
       });
     }
-
   } catch (err) {
-
     console.error(err);
-
     return res.status(500).json({
       success: false,
       message: err.message
     });
-
   }
-
 }
