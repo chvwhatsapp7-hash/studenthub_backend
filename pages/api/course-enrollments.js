@@ -1,9 +1,42 @@
 import pool from "../../lib/db";
 
 export default async function handler(req, res) {
-
   try {
 
+    // =========================
+    // ✅ GET → Get Courses by user_id
+    // =========================
+    if (req.method === "GET") {
+
+      const { user_id } = req.query;
+
+      if (!user_id) {
+        return res.status(400).json({
+          message: "user_id is required"
+        });
+      }
+
+      const query = `
+        SELECT 
+          c.course_id,
+          c.title
+        FROM "CourseEnrollment" ce
+        JOIN "Course" c 
+          ON ce.course_id = c.course_id
+        WHERE ce.user_id = $1
+      `;
+
+      const result = await pool.query(query, [user_id]);
+
+      return res.status(200).json({
+        success: true,
+        data: result.rows
+      });
+    }
+
+    // =========================
+    // ✅ POST → Enroll
+    // =========================
     if (req.method === "POST") {
 
       const { user_id, course_id } = req.body;
@@ -14,6 +47,7 @@ export default async function handler(req, res) {
         });
       }
 
+      // Check already enrolled
       const check = await pool.query(
         `SELECT * FROM "CourseEnrollment"
          WHERE user_id = $1 AND course_id = $2`,
@@ -26,6 +60,7 @@ export default async function handler(req, res) {
         });
       }
 
+      // Insert
       const insertQuery = `
         INSERT INTO "CourseEnrollment"
         (user_id, course_id, enrollment_date)
@@ -45,6 +80,9 @@ export default async function handler(req, res) {
       });
     }
 
+    // =========================
+    // ✅ DELETE → Unenroll
+    // =========================
     if (req.method === "DELETE") {
 
       const { user_id, course_id } = req.body;
@@ -74,13 +112,18 @@ export default async function handler(req, res) {
       });
     }
 
-    return res.status(405).json({ message: "Method not allowed" });
+    // =========================
+    // ❌ Invalid Method
+    // =========================
+    return res.status(405).json({
+      message: "Method not allowed"
+    });
 
   } catch (err) {
 
     console.error(err);
 
-    res.status(500).json({
+    return res.status(500).json({
       message: err.message
     });
   }
