@@ -2,8 +2,12 @@ import { pool } from "../../../lib/database";
 
 export default async function handler(req, res) {
   try {
-    // -------------------- GET USER BY ID --------------------
+
+    // =========================================================
+    // ✅ GET USER BY ID (FULL PROFILE)
+    // =========================================================
     if (req.method === "GET") {
+
       const { user_id } = req.query;
 
       if (!user_id) {
@@ -15,7 +19,7 @@ export default async function handler(req, res) {
 
       // ✅ USER DETAILS + ROLE
       const userQuery = `
-        SELECT u.*, r.role_id, r.role_name AS role_name
+        SELECT u.*, r.role_name
         FROM "User" u
         JOIN "Role" r ON u.role_id = r.role_id
         WHERE u.user_id = $1`;
@@ -49,7 +53,7 @@ export default async function handler(req, res) {
       `;
       const applicationResult = await pool.query(applicationQuery, [user_id]);
 
-      // ✅ COURSES ENROLLED
+      // ✅ COURSES
       const courseQuery = `
         SELECT 
           ce.*,
@@ -100,19 +104,95 @@ export default async function handler(req, res) {
           courses: courseResult.rows,
           hackathons: hackathonResult.rows,
           certificates: certificateResult.rows,
-          projects: projectResult.rows, // added projects
+          projects: projectResult.rows
         }
       });
     }
 
-    // -------------------- INVALID METHOD --------------------
-    else {
-      return res.status(405).json({
-        message: "Method not allowed"
+    // =========================================================
+    // ✅ UPDATE USER (PARTIAL UPDATE)
+    // =========================================================
+    if (req.method === "PUT") {
+
+      const { user_id, ...fields } = req.body;
+
+      if (!user_id) {
+        return res.status(400).json({
+          success: false,
+          message: "user_id is required"
+        });
+      }
+
+      // ✅ Allowed fields (based on your schema)
+      const allowedFields = [
+        "full_name",
+        "email",
+        "phone",
+        "university",
+        "degree",
+        "graduation_year",
+        "resume_url",
+        "linkedin_url",
+        "github_url",
+        "about_me",
+        "address",
+        "age"
+      ];
+
+      // ✅ Filter valid fields only
+      const updates = Object.entries(fields).filter(
+        ([key, value]) =>
+          allowedFields.includes(key) && value !== undefined
+      );
+
+      if (updates.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "No valid fields provided to update"
+        });
+      }
+
+      // ✅ Build dynamic SQL
+      const setClause = updates
+        .map(([key], index) => `"${key}" = $${index + 2}`)
+        .join(", ");
+
+      const values = updates.map(([_, value]) => value);
+
+      const updateQuery = `
+        UPDATE "User"
+        SET ${setClause}, updated_at = NOW()
+        WHERE user_id = $1
+        RETURNING *;
+      `;
+
+      const result = await pool.query(updateQuery, [user_id, ...values]);
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found"
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Profile updated successfully",
+        data: result.rows[0]
       });
     }
+
+    // =========================================================
+    // ❌ METHOD NOT ALLOWED
+    // =========================================================
+    return res.status(405).json({
+      success: false,
+      message: "Method not allowed"
+    });
+
   } catch (err) {
     console.error(err);
+
     return res.status(500).json({
       success: false,
       message: err.message
