@@ -22,8 +22,8 @@ export default async function handler(req, res) {
         SELECT u.*, r.role_name
         FROM "User" u
         JOIN "Role" r ON u.role_id = r.role_id
-        WHERE u.user_id = $1`;
-
+        WHERE u.user_id = $1
+      `;
       const userResult = await pool.query(userQuery, [user_id]);
 
       if (userResult.rows.length === 0) {
@@ -35,7 +35,9 @@ export default async function handler(req, res) {
 
       const user = userResult.rows[0];
 
+      // =========================================================
       // ✅ APPLICATIONS
+      // =========================================================
       const applicationQuery = `
         SELECT 
           a.*,
@@ -53,7 +55,9 @@ export default async function handler(req, res) {
       `;
       const applicationResult = await pool.query(applicationQuery, [user_id]);
 
+      // =========================================================
       // ✅ COURSES
+      // =========================================================
       const courseQuery = `
         SELECT 
           ce.*,
@@ -65,7 +69,9 @@ export default async function handler(req, res) {
       `;
       const courseResult = await pool.query(courseQuery, [user_id]);
 
+      // =========================================================
       // ✅ HACKATHONS
+      // =========================================================
       const hackathonQuery = `
         SELECT 
           hp.*,
@@ -77,7 +83,9 @@ export default async function handler(req, res) {
       `;
       const hackathonResult = await pool.query(hackathonQuery, [user_id]);
 
+      // =========================================================
       // ✅ CERTIFICATES
+      // =========================================================
       const certificateQuery = `
         SELECT certificate_id, title, issuer, issue_date, file_url, created_at
         FROM "Certificate"
@@ -86,7 +94,9 @@ export default async function handler(req, res) {
       `;
       const certificateResult = await pool.query(certificateQuery, [user_id]);
 
+      // =========================================================
       // ✅ PROJECTS
+      // =========================================================
       const projectQuery = `
         SELECT project_id, title, description, created_at
         FROM "Project"
@@ -95,7 +105,9 @@ export default async function handler(req, res) {
       `;
       const projectResult = await pool.query(projectQuery, [user_id]);
 
+      // =========================================================
       // ✅ FINAL RESPONSE
+      // =========================================================
       return res.status(200).json({
         success: true,
         data: {
@@ -110,12 +122,13 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // ✅ UPDATE USER (PARTIAL UPDATE)
+    // ✅ UPDATE USER (PARTIAL UPDATE USING USER_ID)
     // =========================================================
     if (req.method === "PUT") {
 
       const { user_id, ...fields } = req.body;
 
+      // ✅ Validate user_id
       if (!user_id) {
         return res.status(400).json({
           success: false,
@@ -123,7 +136,7 @@ export default async function handler(req, res) {
         });
       }
 
-      // ✅ Allowed fields (based on your schema)
+      // ✅ Allowed fields
       const allowedFields = [
         "full_name",
         "email",
@@ -142,7 +155,10 @@ export default async function handler(req, res) {
       // ✅ Filter valid fields only
       const updates = Object.entries(fields).filter(
         ([key, value]) =>
-          allowedFields.includes(key) && value !== undefined
+          allowedFields.includes(key) &&
+          value !== undefined &&
+          value !== null &&
+          value !== ""
       );
 
       if (updates.length === 0) {
@@ -153,22 +169,20 @@ export default async function handler(req, res) {
       }
 
       // ✅ Build dynamic SQL
-      const setClause = updates
-        .map(([key], index) => `"${key}" = $${index + 2}`)
-        .join(", ");
+      let query = `UPDATE "User" SET `;
+      let values = [user_id];
 
-      const values = updates.map(([_, value]) => value);
+      updates.forEach(([key, value], index) => {
+        query += `"${key}" = $${index + 2}, `;
+        values.push(value);
+      });
 
-      const updateQuery = `
-        UPDATE "User"
-        SET ${setClause}, updated_at = NOW()
-        WHERE user_id = $1
-        RETURNING *;
-      `;
+      // ✅ Add timestamp + condition
+      query += `updated_at = NOW() WHERE user_id = $1 RETURNING *`;
 
-      const result = await pool.query(updateQuery, [user_id, ...values]);
+      const result = await pool.query(query, values);
 
-      if (result.rows.length === 0) {
+      if (result.rowCount === 0) {
         return res.status(404).json({
           success: false,
           message: "User not found"
