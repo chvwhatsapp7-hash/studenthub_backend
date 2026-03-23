@@ -7,10 +7,9 @@ export default async function handler(req, res) {
       const { type, page = 1, limit = 10, search = "" } = req.query;
       const offset = (page - 1) * limit;
 
-      // ════════════════════════════════════════
-      //  GET /api/bulk?type=users
-      // ════════════════════════════════════════
+
       if (type === "users") {
+
         const query = `
           SELECT 
             u.user_id,
@@ -22,7 +21,7 @@ export default async function handler(req, res) {
             u.created_at,
             r.role_name,
             CASE 
-              WHEN u.password_hash IS NOT NULL THEN 'active'
+              WHEN u.status = 1 THEN 'active'
               ELSE 'inactive'
             END AS status
           FROM "User" u
@@ -40,7 +39,7 @@ export default async function handler(req, res) {
         `;
 
         const [result, countResult] = await Promise.all([
-          pool.query(query,      [limit, offset, search]),
+          pool.query(query, [limit, offset, search]),
           pool.query(countQuery, [search]),
         ]);
 
@@ -49,49 +48,45 @@ export default async function handler(req, res) {
         return res.status(200).json({
           success: true,
           type: "users",
-          page:       parseInt(page),
-          limit:      parseInt(limit),
+          page: parseInt(page),
+          limit: parseInt(limit),
           total,
           totalPages: Math.ceil(total / limit),
-          data:       result.rows,
+          data: result.rows,
         });
       }
 
-      // ════════════════════════════════════════
-      //  GET /api/bulk?type=companies
-      // ════════════════════════════════════════
+
       if (type === "companies") {
+
         const query = `
           SELECT
             c.company_id,
             c.name,
-            c.email,
-            c.phone,
+  
             c.website,
             c.location,
             c.industry,
             c.created_at,
             CASE
-              WHEN c.description IS NOT NULL THEN 'active'
+              WHEN c.status = 1 THEN 'active'
               ELSE 'inactive'
             END AS status
           FROM "Company" c
           WHERE ($3 = '' OR c.name ILIKE '%' || $3 || '%'
-            OR c.email ILIKE '%' || $3 || '%'
-            OR c.industry ILIKE '%' || $3 || '%')
+                     OR c.industry ILIKE '%' || $3 || '%')
           ORDER BY c.created_at DESC
           LIMIT $1 OFFSET $2
         `;
 
         const countQuery = `
           SELECT COUNT(*) FROM "Company"
-          WHERE ($1 = '' OR name ILIKE '%' || $1 || '%'
-            OR email ILIKE '%' || $1 || '%'
+                    WHERE ($1 = '' OR name ILIKE '%' || $1 || '%'
             OR industry ILIKE '%' || $1 || '%')
         `;
 
         const [result, countResult] = await Promise.all([
-          pool.query(query,      [limit, offset, search]),
+          pool.query(query, [limit, offset, search]),
           pool.query(countQuery, [search]),
         ]);
 
@@ -100,18 +95,17 @@ export default async function handler(req, res) {
         return res.status(200).json({
           success: true,
           type: "companies",
-          page:       parseInt(page),
-          limit:      parseInt(limit),
+          page: parseInt(page),
+          limit: parseInt(limit),
           total,
           totalPages: Math.ceil(total / limit),
-          data:       result.rows,
+          data: result.rows,
         });
       }
+      
 
-      // ════════════════════════════════════════
-      //  GET /api/bulk?type=internships
-      // ════════════════════════════════════════
       if (type === "internships") {
+
         const query = `
           SELECT
             i.internship_id,
@@ -123,7 +117,11 @@ export default async function handler(req, res) {
             i.description,
             i.created_at,
             c.name AS company_name,
-            COUNT(a.application_id) AS total_applications
+            COUNT(a.id) AS total_applications,
+            CASE
+              WHEN i.status = 1 THEN 'active'
+              ELSE 'inactive'
+            END AS status
           FROM "Internship" i
           LEFT JOIN "Company" c ON i.company_id = c.company_id
           LEFT JOIN "Application" a ON a.internship_id = i.internship_id
@@ -144,7 +142,7 @@ export default async function handler(req, res) {
         `;
 
         const [result, countResult] = await Promise.all([
-          pool.query(query,      [limit, offset, search]),
+          pool.query(query, [limit, offset, search]),
           pool.query(countQuery, [search]),
         ]);
 
@@ -153,33 +151,37 @@ export default async function handler(req, res) {
         return res.status(200).json({
           success: true,
           type: "internships",
-          page:       parseInt(page),
-          limit:      parseInt(limit),
+          page: parseInt(page),
+          limit: parseInt(limit),
           total,
           totalPages: Math.ceil(total / limit),
-          data:       result.rows,
+          data: result.rows,
         });
       }
 
-      // ════════════════════════════════════════
-      //  GET /api/bulk?type=jobs
-      // ════════════════════════════════════════
+
       if (type === "jobs") {
+
         const query = `
           SELECT
             j.job_id,
             j.title,
             j.location,
-            j.salary,
+            j.salary_min,
+            j.salary_max,
             j.job_type,
             j.experience_level,
             j.description,
             j.created_at,
             c.name AS company_name,
-            COUNT(ja.application_id) AS total_applications
+            COUNT(a.id) AS total_applications,
+            CASE
+              WHEN j.status = 1 THEN 'active'
+              ELSE 'inactive'
+            END AS status
           FROM "Job" j
           LEFT JOIN "Company" c ON j.company_id = c.company_id
-          LEFT JOIN "JobApplication" ja ON ja.job_id = j.job_id
+          LEFT JOIN "Application" a ON a.job_id = j.job_id
           WHERE ($3 = '' OR j.title ILIKE '%' || $3 || '%'
             OR c.name ILIKE '%' || $3 || '%'
             OR j.location ILIKE '%' || $3 || '%'
@@ -199,7 +201,7 @@ export default async function handler(req, res) {
         `;
 
         const [result, countResult] = await Promise.all([
-          pool.query(query,      [limit, offset, search]),
+          pool.query(query, [limit, offset, search]),
           pool.query(countQuery, [search]),
         ]);
 
@@ -208,15 +210,15 @@ export default async function handler(req, res) {
         return res.status(200).json({
           success: true,
           type: "jobs",
-          page:       parseInt(page),
-          limit:      parseInt(limit),
+          page: parseInt(page),
+          limit: parseInt(limit),
           total,
           totalPages: Math.ceil(total / limit),
-          data:       result.rows,
+          data: result.rows,
         });
       }
-
-      // ── No valid type provided ─────────────
+      
+      
       return res.status(400).json({
         success: false,
         message: "Invalid type. Use: users | companies | internships | jobs",
@@ -226,6 +228,9 @@ export default async function handler(req, res) {
     return res.status(405).json({ message: "Method not allowed" });
 
   } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
+    return res.status(500).json({
+      success: false,
+      message: err.message
+    });
   }
 }
