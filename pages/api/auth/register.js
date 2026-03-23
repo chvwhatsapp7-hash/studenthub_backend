@@ -3,121 +3,155 @@ import pool from "../../../lib/db";
 
 export default async function handler(req, res) {
 
-  if (req.method !== "POST") {
-    return res.status(405).json({ message: "Only POST allowed" });
-  }
-
   try {
-    
-    const {
-      full_name,
-      email,
-      password,
-      phone = null,
-      university = null,
-      degree = null,
-      graduation_year = null,
-      resume_url = null,
-      linkedin_url = null,
-      github_url = null,
-      age,
-      role_id
-    } = req.body;
 
+    if (req.method === "POST") {
 
-    if (!full_name || !email || !password || age === undefined) {
-      return res.status(400).json({
-        success: false,
-        message: "full_name, email, password, and age are required"
-      });
-    }
-
-  
-    const emailCheck = await pool.query(
-      `SELECT * FROM "User" WHERE email = $1`,
-      [email]
-    );
-
-    if (emailCheck.rows.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Email already registered"
-      });
-    }
-
-    
-    const roleCheck = await pool.query(
-  `SELECT * FROM "Role" WHERE role_id = $1`,
-  [role_id]
-);
-
-    if (roleCheck.rows.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid role_id"
-      });
-    }
-
-    
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-  
-    const query = `
-      INSERT INTO "User"
-      (
+      const {
         full_name,
         email,
-        password_hash,
-        phone,
-        university,
-        degree,
-        graduation_year,
-        resume_url,
-        linkedin_url,
-        github_url,
+        password,
+        phone = null,
+        university = null,
+        degree = null,
+        graduation_year = null,
+        resume_url = null,
+        linkedin_url = null,
+        github_url = null,
         age,
-        role_id,
-        created_at,
-        updated_at
-      )
-      VALUES
-      (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),NOW()
-      )
-      RETURNING user_id, full_name, email, role_id, created_at
-    `;
+        role_id
+      } = req.body;
 
-    const values = [
-      full_name,
-      email,
-      hashedPassword,
-      phone,
-      university,
-      degree,
-      graduation_year,
-      resume_url,
-      linkedin_url,
-      github_url,
-      age,
-      role_id
-    ];
+      if (!full_name || !email || !password || age === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: "full_name, email, password, and age are required"
+        });
+      }
 
-    const result = await pool.query(query, values);
+      const emailCheck = await pool.query(
+        `SELECT * FROM "User" WHERE email = $1`,
+        [email]
+      );
 
-   
-    return res.status(201).json({
-      success: true,
-      message: "User created successfully",
-      data: result.rows[0]
-    });
+      if (emailCheck.rows.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Email already registered"
+        });
+      }
+
+      const roleCheck = await pool.query(
+        `SELECT * FROM "Role" WHERE role_id = $1`,
+        [role_id]
+      );
+
+      if (roleCheck.rows.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid role_id"
+        });
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      const result = await pool.query(
+        `INSERT INTO "User"
+        (full_name,email,password_hash,phone,university,degree,graduation_year,resume_url,linkedin_url,github_url,age,role_id,created_at,updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),NOW())
+        RETURNING user_id, full_name, email, role_id`,
+        [
+          full_name,
+          email,
+          hashedPassword,
+          phone,
+          university,
+          degree,
+          graduation_year,
+          resume_url,
+          linkedin_url,
+          github_url,
+          age,
+          role_id
+        ]
+      );
+
+      return res.status(201).json({
+        success: true,
+        message: "User created successfully",
+        data: result.rows[0]
+      });
+    }
+
+    if (req.method === "GET") {
+
+      const { user_id } = req.query;
+
+      if (user_id) {
+        const result = await pool.query(
+          `SELECT * FROM "User" WHERE user_id = $1`,
+          [user_id]
+        );
+
+        return res.status(200).json(result.rows[0]);
+      }
+
+      const result = await pool.query(`SELECT * FROM "User"`);
+
+      return res.status(200).json(result.rows);
+    }
+
+    if (req.method === "PUT") {
+
+      const { user_id, full_name, phone, university } = req.body;
+
+      if (!user_id) {
+        return res.status(400).json({ message: "user_id required" });
+      }
+
+      const result = await pool.query(
+        `UPDATE "User"
+         SET full_name = COALESCE($1, full_name),
+             phone = COALESCE($2, phone),
+             university = COALESCE($3, university),
+             updated_at = NOW()
+         WHERE user_id = $4
+         RETURNING *`,
+        [full_name, phone, university, user_id]
+      );
+
+      return res.status(200).json({
+        success: true,
+        data: result.rows[0]
+      });
+    }
+
+    if (req.method === "DELETE") {
+
+      const { user_id } = req.body;
+
+      if (!user_id) {
+        return res.status(400).json({ message: "user_id required" });
+      }
+
+      await pool.query(
+        `DELETE FROM "User" WHERE user_id = $1`,
+        [user_id]
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "User deleted"
+      });
+    }
+    return res.status(405).json({ message: "Method not allowed" });
 
   } catch (err) {
-    console.error("ERROR:", err);
+    console.error(err);
 
     return res.status(500).json({
       success: false,
-      message: "Internal Server Error",
-      error: err.message
+      message: err.message
     });
   }
 }
