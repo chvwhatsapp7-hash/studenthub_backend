@@ -17,7 +17,6 @@ export default async function handler(req, res) {
         });
       }
 
-      // ✅ USER DETAILS + ROLE
       const userQuery = `
         SELECT u.*, r.role_name
         FROM "User" u
@@ -35,9 +34,6 @@ export default async function handler(req, res) {
 
       const user = userResult.rows[0];
 
-      // =========================================================
-      // ✅ APPLICATIONS
-      // =========================================================
       const applicationQuery = `
         SELECT 
           a.*,
@@ -55,9 +51,6 @@ export default async function handler(req, res) {
       `;
       const applicationResult = await pool.query(applicationQuery, [user_id]);
 
-      // =========================================================
-      // ✅ COURSES
-      // =========================================================
       const courseQuery = `
         SELECT 
           ce.*,
@@ -69,9 +62,6 @@ export default async function handler(req, res) {
       `;
       const courseResult = await pool.query(courseQuery, [user_id]);
 
-      // =========================================================
-      // ✅ HACKATHONS
-      // =========================================================
       const hackathonQuery = `
         SELECT 
           hp.*,
@@ -83,9 +73,6 @@ export default async function handler(req, res) {
       `;
       const hackathonResult = await pool.query(hackathonQuery, [user_id]);
 
-      // =========================================================
-      // ✅ CERTIFICATES
-      // =========================================================
       const certificateQuery = `
         SELECT certificate_id, title, issuer, issue_date, file_url, created_at
         FROM "Certificate"
@@ -94,9 +81,6 @@ export default async function handler(req, res) {
       `;
       const certificateResult = await pool.query(certificateQuery, [user_id]);
 
-      // =========================================================
-      // ✅ PROJECTS
-      // =========================================================
       const projectQuery = `
         SELECT project_id, title, description, created_at
         FROM "Project"
@@ -105,9 +89,19 @@ export default async function handler(req, res) {
       `;
       const projectResult = await pool.query(projectQuery, [user_id]);
 
-      // =========================================================
-      // ✅ FINAL RESPONSE
-      // =========================================================
+      const skillQuery = `
+        SELECT 
+          us.id,
+          us.skill_id,
+          us.proficiency,
+          s.name AS skill_name
+        FROM "UserSkill" us
+        JOIN "Skill" s ON us.skill_id = s.skill_id
+        WHERE us.user_id = $1
+        ORDER BY us.proficiency DESC
+      `;
+      const skillResult = await pool.query(skillQuery, [user_id]);
+
       return res.status(200).json({
         success: true,
         data: {
@@ -116,19 +110,19 @@ export default async function handler(req, res) {
           courses: courseResult.rows,
           hackathons: hackathonResult.rows,
           certificates: certificateResult.rows,
-          projects: projectResult.rows
+          projects: projectResult.rows,
+          skills: skillResult.rows
         }
       });
     }
 
     // =========================================================
-    // ✅ UPDATE USER (PARTIAL UPDATE USING USER_ID)
+    // ✅ UPDATE USER + SKILLS (PARTIAL UPDATE)
     // =========================================================
     if (req.method === "PUT") {
 
-      const { user_id, ...fields } = req.body;
+      const { user_id, skills, ...fields } = req.body;
 
-      // ✅ Validate user_id
       if (!user_id) {
         return res.status(400).json({
           success: false,
@@ -136,7 +130,23 @@ export default async function handler(req, res) {
         });
       }
 
-      // ✅ Allowed fields
+      // ✅ Validate skills if provided
+      if (skills !== undefined && skills.length > 0) {
+        const isValid = skills.every(
+          (s) =>
+            typeof s.skill_id === "number" &&
+            typeof s.proficiency === "number" &&
+            s.proficiency >= 1 &&
+            s.proficiency <= 5
+        );
+        if (!isValid) {
+          return res.status(400).json({
+            success: false,
+            message: "Each skill must have a numeric skill_id and proficiency (1–5)"
+          });
+        }
+      }
+
       const allowedFields = [
         "full_name",
         "email",
@@ -152,7 +162,6 @@ export default async function handler(req, res) {
         "age"
       ];
 
-      // ✅ Filter valid fields only
       const updates = Object.entries(fields).filter(
         ([key, value]) =>
           allowedFields.includes(key) &&
@@ -161,39 +170,90 @@ export default async function handler(req, res) {
           value !== ""
       );
 
-      if (updates.length === 0) {
+      // ✅ Must have at least user fields OR skills to update
+      if (updates.length === 0 && skills === undefined) {
         return res.status(400).json({
           success: false,
           message: "No valid fields provided to update"
         });
       }
 
-      // ✅ Build dynamic SQL
-      let query = `UPDATE "User" SET `;
-      let values = [user_id];
+      // ✅ Use transaction for atomic user + skills update
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
 
-      updates.forEach(([key, value], index) => {
-        query += `"${key}" = $${index + 2}, `;
-        values.push(value);
-      });
+        let updatedUser = null;
 
-      // ✅ Add timestamp + condition
-      query += `updated_at = NOW() WHERE user_id = $1 RETURNING *`;
+        // 1. Update user fields if any provided
+        if (updates.length > 0) {
+          let query = `UPDATE "User" SET `;
+          let values = [user_id];
 
-      const result = await pool.query(query, values);
+          const setClauses = updates.map(([key, value], index) => {
+            values.push(value);
+            return `"${key}" = $${index + 2}`;
+          });
 
-      if (result.rowCount === 0) {
-        return res.status(404).json({
-          success: false,
-          message: "User not found"
+          query += setClauses.join(", ") + `, updated_at = NOW() WHERE user_id = $1 RETURNING *`;
+
+          const result = await client.query(query, values);
+
+          if (result.rowCount === 0) {
+            throw new Error("User not found");
+          }
+
+          updatedUser = result.rows[0];
+        }
+
+        // 2. Add / update skills if provided (NO DELETE — only upsert)
+        if (skills !== undefined && skills.length > 0) {
+
+          // Verify all skill_ids exist in Skill table
+          const skillIds = skills.map((s) => s.skill_id);
+          const skillCheck = await client.query(
+            `SELECT skill_id FROM "Skill" WHERE skill_id = ANY($1::int[])`,
+            [skillIds]
+          );
+
+          if (skillCheck.rows.length !== skillIds.length) {
+            throw new Error("One or more skill_ids are invalid");
+          }
+
+          // Bulk upsert — adds new skill OR updates proficiency if already exists
+          const values = [];
+          const placeholders = skills.map((s, i) => {
+            const base = i * 3;
+            values.push(user_id, s.skill_id, s.proficiency);
+            return `($${base + 1}, $${base + 2}, $${base + 3})`;
+          });
+
+          await client.query(
+            `INSERT INTO "UserSkill" (user_id, skill_id, proficiency)
+             VALUES ${placeholders.join(", ")}
+             ON CONFLICT (user_id, skill_id)
+             DO UPDATE SET proficiency = EXCLUDED.proficiency`,
+            values
+          );
+        }
+
+        await client.query("COMMIT");
+
+        return res.status(200).json({
+          success: true,
+          message: "Profile updated successfully",
+          data: {
+            ...(updatedUser && { user: updatedUser }),
+            skills_updated: skills !== undefined ? skills.length : null
+          }
         });
-      }
 
-      return res.status(200).json({
-        success: true,
-        message: "Profile updated successfully",
-        data: result.rows[0]
-      });
+      } catch (txErr) {
+        await client.query("ROLLBACK");
+        throw txErr;
+      } finally {
+        client.release();
+      }
     }
 
     // =========================================================
@@ -206,7 +266,6 @@ export default async function handler(req, res) {
 
   } catch (err) {
     console.error(err);
-
     return res.status(500).json({
       success: false,
       message: err.message
