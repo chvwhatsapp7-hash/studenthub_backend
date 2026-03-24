@@ -1,4 +1,4 @@
-import {pool} from "../../lib/db";
+import {pool} from "../../lib/database";
 import {cors} from "../../lib/cors";
 
 export default async function handler(req, res){
