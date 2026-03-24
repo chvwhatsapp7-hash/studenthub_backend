@@ -1,10 +1,12 @@
 import pool from "../../lib/db";
+import { cors } from "../../lib/cors";
 
 export default async function handler(req, res) {
+  if (cors(req, res)) return;
   try {
 
     // ═══════════════════════════════════════════
-    //  POST — Create Internship + Link Skills
+    //  POST — Create Internship + Link Skills by ID
     // ═══════════════════════════════════════════
     if (req.method === "POST") {
       const {
@@ -14,7 +16,7 @@ export default async function handler(req, res) {
         duration,
         stipend,
         description,
-        skills = [], // ✅ array of skill_names e.g. ["flutter", "dart"]
+        skill_ids = [], // ✅ array of skill IDs e.g. [1, 3, 7]
       } = req.body;
 
       // 1️⃣ Insert internship
@@ -27,23 +29,9 @@ export default async function handler(req, res) {
 
       const intern = internResult.rows[0];
 
-      // 2️⃣ Insert each skill by name (auto-creates if not exists)
-      if (skills.length > 0) {
-        for (const skill_name of skills) {
-          const name = skill_name.toLowerCase().trim();
-
-          let skill = await pool.query(
-            `SELECT * FROM "Skill" WHERE name = $1`, [name]
-          );
-
-          if (skill.rows.length === 0) {
-            skill = await pool.query(
-              `INSERT INTO "Skill"(name) VALUES($1) RETURNING *`, [name]
-            );
-          }
-
-          const skill_id = skill.rows[0].skill_id;
-
+      // 2️⃣ Link skills directly by ID — no name lookup needed
+      if (skill_ids.length > 0) {
+        for (const skill_id of skill_ids) {
           await pool.query(`
             INSERT INTO "InternshipSkill"(internship_id, skill_id)
             VALUES ($1, $2)
@@ -84,7 +72,7 @@ export default async function handler(req, res) {
     }
 
     // ═══════════════════════════════════════════
-    //  PUT — Update Internship + Re-link Skills
+    //  PUT — Update Internship + Re-link Skills by ID
     // ═══════════════════════════════════════════
     else if (req.method === "PUT") {
       const {
@@ -95,7 +83,7 @@ export default async function handler(req, res) {
         duration,
         stipend,
         description,
-        skills, // ✅ optional — pass to update skills
+        skill_ids, // ✅ optional array of skill IDs
       } = req.body;
 
       // 1️⃣ Update internship
@@ -112,28 +100,14 @@ export default async function handler(req, res) {
         RETURNING *
       `, [title, company_id, location, duration, stipend, description, internship_id]);
 
-      // 2️⃣ If skills provided, delete old and re-insert
-      if (skills && skills.length > 0) {
+      // 2️⃣ If skill_ids provided — delete old and re-insert
+      if (skill_ids && skill_ids.length > 0) {
         await pool.query(
           `DELETE FROM "InternshipSkill" WHERE internship_id = $1`,
           [internship_id]
         );
 
-        for (const skill_name of skills) {
-          const name = skill_name.toLowerCase().trim();
-
-          let skill = await pool.query(
-            `SELECT * FROM "Skill" WHERE name = $1`, [name]
-          );
-
-          if (skill.rows.length === 0) {
-            skill = await pool.query(
-              `INSERT INTO "Skill"(name) VALUES($1) RETURNING *`, [name]
-            );
-          }
-
-          const skill_id = skill.rows[0].skill_id;
-
+        for (const skill_id of skill_ids) {
           await pool.query(`
             INSERT INTO "InternshipSkill"(internship_id, skill_id)
             VALUES ($1, $2)
