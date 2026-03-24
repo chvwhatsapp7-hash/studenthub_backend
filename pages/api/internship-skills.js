@@ -1,8 +1,15 @@
 import pool from "../../lib/db";
+<<<<<<< HEAD:pages/api/internship-skills.js
 import cors from "../../lib/cors";
 
 export default async function handler(req, res) {
   if(cors(req, res)) return;
+=======
+import{cors} from "../../lib/cors";
+
+export default async function handler(req, res) {
+    if (cors(req, res)) return;
+>>>>>>> a4d9fed012c11dd0c420df913013bb09388f9e3d:pages/api/internship-skills
   try {
 
     if (req.method === "POST") {
