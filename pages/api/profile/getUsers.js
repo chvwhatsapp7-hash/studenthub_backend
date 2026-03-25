@@ -1,9 +1,8 @@
-import { pool } from "../../../lib/database";
-import { cors } from "../../../lib/cors";
+import {pool} from "../../../lib/database";
+import {cors} from "../../../lib/cors";
 
 export default async function handler(req, res) {
-    if (cors(req, res)) return;
-
+  if(cors(req, res)) return;
   try {
 
     // =========================================================

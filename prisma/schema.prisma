@@ -93,6 +93,7 @@ model Course {
   status Int @default(1)
 
   enrollments CourseEnrollment[]
+  courseSkills CourseSkill[]
 }
 
 model Hackathon {
@@ -188,6 +189,7 @@ model Skill {
   jobSkills  JobSkill[]
   internshipSkills InternshipSkill[]
   projectSkills ProjectSkill[]
+  courseSkills CourseSkill[]
 }
 
 model UserSkill {
@@ -273,4 +275,16 @@ model ProjectSkill {
   skill      Skill?  @relation(fields: [skill_id], references: [skill_id])
 
   @@unique([project_id, skill_id, custom_skill])
+}
+
+model CourseSkill {
+  id        Int @id @default(autoincrement())
+
+  course_id Int
+  skill_id  Int
+
+  course    Course @relation(fields: [course_id], references: [course_id])
+  skill     Skill  @relation(fields: [skill_id], references: [skill_id])
+
+  @@unique([course_id, skill_id])
 }
