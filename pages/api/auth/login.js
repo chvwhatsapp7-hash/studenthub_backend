@@ -24,7 +24,7 @@ export default async function handler(req, res) {
 
     // ✅ Get user
     const query = `
-      SELECT user_id, role_id, password_hash
+      SELECT user_id,role_id,full_name password_hash
       FROM "User"
       WHERE email = $1
     `;
