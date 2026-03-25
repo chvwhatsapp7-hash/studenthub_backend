@@ -56,7 +56,8 @@ export default async function handler(req, res) {
       message: "Login successful",
       data: {
         user_id: user.user_id,
-        role_id: user.role_id
+        role_id: user.role_id,
+        full_name:user.full_name
       }
     });
 
