@@ -1,8 +1,13 @@
 // api/profile/recommendations.js
 import pool from '../../../lib/db';
 import { cors } from '../../../lib/cors';
+import { authenticate } from "../../../lib/auth";
+
 
 export default async function handler(req, res) {
+  const user = authenticate(req, res);
+  if (!user) return res.status(401).json({ success: false, message: "Unauthorized" });
+  
   if (cors(req, res)) return;
   if (req.method !== 'GET') return res.status(405).json({ message: 'Only GET allowed' });
 
