@@ -1,15 +1,13 @@
 import pool from "../../lib/db";
-import {cors} from "../../lib/cors";
-import { authenticate } from "../../lib/auth";
+import { cors } from "../../lib/cors";
 
 export default async function handler(req, res) {
-  const user = authenticate(req, res);
-  if (!user) return res.status(401).json({ success: false, message: "Unauthorized" });
-  if(cors(req, res)) return;
+  if (cors(req, res)) return;
+
   try {
 
     // ═══════════════════════════════════════════
-    //  POST — Create Job + Link Skills
+    // POST — Create Job + Skills
     // ═══════════════════════════════════════════
     if (req.method === "POST") {
       const {
@@ -17,23 +15,47 @@ export default async function handler(req, res) {
         company_id,
         location,
         description,
-        skills = [], // ✅ array of skill_ids e.g. [1, 2, 3]
+        salary_min,
+        salary_max,
+        job_type,
+        experience_level,
+        skills = [],
       } = req.body;
 
-      // 1️⃣ Insert the job
+      
       const jobResult = await pool.query(
         `
         INSERT INTO "Job"
-        (title, company_id, location, description, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, NOW(), NOW())
+        (
+          title,
+          company_id,
+          location,
+          description,
+          salary_min,
+          salary_max,
+          job_type,
+          experience_level,
+          created_at,
+          updated_at
+        )
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW(),NOW())
         RETURNING *
         `,
-        [title, company_id, location, description]
+        [
+          title,
+          company_id,
+          location,
+          description,
+          salary_min,
+          salary_max,
+          job_type,
+          experience_level
+        ]
       );
 
       const job = jobResult.rows[0];
 
-      // 2️⃣ Insert each skill into JobSkill table
+      // Insert skills
       if (skills.length > 0) {
         for (const skill_id of skills) {
           await pool.query(
@@ -54,7 +76,7 @@ export default async function handler(req, res) {
     }
 
     // ═══════════════════════════════════════════
-    //  GET — Fetch All Jobs with Skills
+    // GET — Fetch Jobs
     // ═══════════════════════════════════════════
     else if (req.method === "GET") {
       const result = await pool.query(`
@@ -77,7 +99,7 @@ export default async function handler(req, res) {
     }
 
     // ═══════════════════════════════════════════
-    //  PUT — Update Job + Re-link Skills
+    // PUT — Update Job
     // ═══════════════════════════════════════════
     else if (req.method === "PUT") {
       const {
@@ -86,30 +108,46 @@ export default async function handler(req, res) {
         company_id,
         location,
         description,
-        skills = [], // ✅ optional — pass new skill_ids to update
+        salary_min,
+        salary_max,
+        job_type,
+        experience_level,
+        skills = [],
       } = req.body;
 
-      // 1️⃣ Update job details
+
       const result = await pool.query(
         `
         UPDATE "Job"
-        SET title = $1,
-            company_id = $2,
-            location = $3,
-            description = $4,
-            updated_at = NOW()
-        WHERE job_id = $5
+        SET
+          title = $1,
+          company_id = $2,
+          location = $3,
+          description = $4,
+          salary_min = $5,
+          salary_max = $6,
+          job_type = $7,
+          experience_level = $8,
+          updated_at = NOW()
+        WHERE job_id = $9
         RETURNING *
         `,
-        [title, company_id, location, description, job_id]
+        [
+          title,
+          company_id,
+          location,
+          description,
+          salary_min,
+          salary_max,
+          job_type,
+          experience_level,
+          job_id
+        ]
       );
 
-      // 2️⃣ If skills provided, delete old and re-insert
+      // Update skills
       if (skills.length > 0) {
-        await pool.query(
-          `DELETE FROM "JobSkill" WHERE job_id = $1`,
-          [job_id]
-        );
+        await pool.query(`DELETE FROM "JobSkill" WHERE job_id = $1`, [job_id]);
 
         for (const skill_id of skills) {
           await pool.query(
@@ -130,24 +168,16 @@ export default async function handler(req, res) {
     }
 
     // ═══════════════════════════════════════════
-    //  DELETE — Remove Job (cascade removes JobSkill)
+    // DELETE — Remove Job
     // ═══════════════════════════════════════════
     else if (req.method === "DELETE") {
       const { job_id } = req.body;
 
-      // 1️⃣ Delete linked skills first
-      await pool.query(
-        `DELETE FROM "JobSkill" WHERE job_id = $1`,
-        [job_id]
-      );
+      await pool.query(`DELETE FROM "JobSkill" WHERE job_id = $1`, [job_id]);
 
-      // 2️⃣ Delete the job
+
       const result = await pool.query(
-        `
-        DELETE FROM "Job"
-        WHERE job_id = $1
-        RETURNING *
-        `,
+        `DELETE FROM "Job" WHERE job_id = $1 RETURNING *`,
         [job_id]
       );
 
