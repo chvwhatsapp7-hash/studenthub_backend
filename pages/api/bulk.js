@@ -1,18 +1,28 @@
 import pool from "../../lib/db";
-import {cors} from "../../lib/cors"
+import { cors } from "../../lib/cors";
 import { authenticate } from "../../lib/auth";
 
 export default async function handler(req, res) {
-  const user = authenticate(req, res);
-  if (!user) return res.status(401).json({ success: false, message: "Unauthorized" });
+
+  // ✅ 1. CORS FIRST (VERY IMPORTANT)
   if (cors(req, res)) return;
+
+  // ✅ 2. AUTH AFTER CORS
+  const user = authenticate(req, res);
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      message: "Unauthorized",
+    });
+  }
+
   try {
     if (req.method === "GET") {
 
       const { type, page = 1, limit = 10, search = "" } = req.query;
       const offset = (page - 1) * limit;
 
-
+      // ───────── USERS ─────────
       if (type === "users") {
 
         const query = `
@@ -61,14 +71,14 @@ export default async function handler(req, res) {
         });
       }
 
-
+      // ───────── COMPANIES ─────────
       if (type === "companies") {
 
         const query = `
           SELECT
             c.company_id,
             c.name,
-  
+ 
             c.website,
             c.location,
             c.industry,
@@ -86,7 +96,7 @@ export default async function handler(req, res) {
 
         const countQuery = `
           SELECT COUNT(*) FROM "Company"
-                    WHERE ($1 = '' OR name ILIKE '%' || $1 || '%'
+          WHERE ($1 = '' OR name ILIKE '%' || $1 || '%'
             OR industry ILIKE '%' || $1 || '%')
         `;
 
@@ -107,8 +117,8 @@ export default async function handler(req, res) {
           data: result.rows,
         });
       }
-      
 
+      // ───────── INTERNSHIPS ─────────
       if (type === "internships") {
 
         const query = `
@@ -164,7 +174,7 @@ export default async function handler(req, res) {
         });
       }
 
-
+      // ───────── JOBS ─────────
       if (type === "jobs") {
 
         const query = `
@@ -222,20 +232,23 @@ export default async function handler(req, res) {
           data: result.rows,
         });
       }
-      
-      
+
       return res.status(400).json({
         success: false,
-        message: "Invalid type. Use: users | companies | internships | jobs",
+        message: "Invalid type",
       });
     }
 
-    return res.status(405).json({ message: "Method not allowed" });
+    return res.status(405).json({
+      success: false,
+      message: "Method not allowed",
+    });
 
   } catch (err) {
+    console.error(err);
     return res.status(500).json({
       success: false,
-      message: err.message
+      message: err.message,
     });
   }
 }
