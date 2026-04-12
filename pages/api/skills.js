@@ -12,9 +12,10 @@ export default async function handler(req, res) {
 
     if (req.method === "GET") {
 
-      const result = await pool.query(`SELECT * FROM "Skill" ORDER BY name`);
+      const result = await pool.query(`SELECT skill_id, name FROM "Skill" ORDER BY name`);
 
       return res.status(200).json({
+        success: true,
         skills: result.rows
       });
     }
