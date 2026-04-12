@@ -1,6 +1,6 @@
-import prisma from "./prisma.js"
+//import prisma from "./prisma.js"
 
-export const logAudit = async ({
+//export const logAudit = async ({
   req,
   action,
   entity_type,
@@ -9,9 +9,9 @@ export const logAudit = async ({
   success,
   error_message,
   response_payload
-}) => {
+//}) => {
   try {
-    const user = req.user || {} // from your authenticate middleware
+   // const user = req.user || {} // from your authenticate middleware
 
     await prisma.auditLog.create({
       data: {
@@ -39,4 +39,4 @@ export const logAudit = async ({
   } catch (err) {
     console.error("Audit log failed:", err.message)
   }
-}
+//}
