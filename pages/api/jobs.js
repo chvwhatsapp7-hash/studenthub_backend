@@ -3,7 +3,11 @@ import { cors } from "../../lib/cors";
 import { sendNotificationToAll } from "../../lib/sendNotificationToAll";
 
 export default async function handler(req, res) {
-  if (cors(req, res)) return;
+ if (cors(req, res)) return;
+ 
+   // ✅ Then authenticate
+   const user = authenticate(req, res);
+   if (!user) return res.status(401).json({ success: false, message: "Unauthorized" });
 
   try {
 
