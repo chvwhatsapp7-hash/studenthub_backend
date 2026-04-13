@@ -1,7 +1,7 @@
 import { pool } from "../../lib/database";
 import { cors } from "../../lib/cors";
 import { authenticate } from "../../lib/auth";
-import { sendNotificationToAll } from "../../lib/sendNotificationToAll";
+//import { sendNotificationToAll } from "../../lib/sendNotificationToAll";
 
 export default async function handler(req, res) {
   const user = authenticate(req, res);
