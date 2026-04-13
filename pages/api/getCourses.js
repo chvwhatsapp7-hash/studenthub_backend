@@ -35,7 +35,14 @@ export default async function handler(req, res) {
         target_group
       } = req.body;
 
-      const group = target_group || "college";
+      // 🔥 EXPLICIT DEFAULT
+      let group = "college";
+
+      if (target_group && target_group.toLowerCase() === "school") {
+        group = "school";
+      } else if (target_group && target_group.toLowerCase() === "college") {
+        group = "college";
+      }
 
       if (!title || !description) {
         return res.status(400).json({
@@ -49,7 +56,6 @@ export default async function handler(req, res) {
       try {
         await client.query("BEGIN");
 
-        // 🔹 Insert course
         const courseResult = await client.query(
           `
           INSERT INTO "Course"
@@ -74,20 +80,17 @@ export default async function handler(req, res) {
         );
 
         const course = courseResult.rows[0];
-        const course_id = course.course_id;
 
-        const linkedSkills = [];
-
-        // 🔹 Link skills (SAFE VERSION)
+        // Link skills
         if (Array.isArray(skill_ids) && skill_ids.length > 0) {
           for (const skill_id of skill_ids) {
             await client.query(
               `
               INSERT INTO "CourseSkill" (course_id, skill_id)
               VALUES ($1, $2)
-              ON CONFLICT (course_id, skill_id) DO NOTHING
+              ON CONFLICT DO NOTHING
               `,
-              [course_id, skill_id]
+              [course.course_id, skill_id]
             );
           }
         }
@@ -98,48 +101,96 @@ export default async function handler(req, res) {
         return res.status(201).json({
           success: true,
           message: "Course created successfully",
-          data: {
-            ...course,
-            skills: linkedSkills,
-          },
+          data: course,
         });
 
-      } catch (txErr) {
+      } catch (err) {
         await client.query("ROLLBACK");
         client.release();
-        console.error("TX ERROR:", txErr);
-        throw txErr;
+        throw err;
       }
     }
 
     // =========================================================
-    // ✅ GET — Fetch Courses (FILTERED)
+    // ✅ GET — Fetch Courses (EXPLICIT LOGIC)
     // =========================================================
     else if (req.method === "GET") {
 
       const { target_group } = req.query;
-      const group = target_group || "college";
 
-      const result = await pool.query(
-        `
-        SELECT
-          c.*,
-          COALESCE(
-            JSON_AGG(
-              JSON_BUILD_OBJECT('skill_id', s.skill_id, 'name', s.name)
-            ) FILTER (WHERE s.skill_id IS NOT NULL),
-            '[]'
-          ) AS skills
-        FROM "Course" c
-        LEFT JOIN "CourseSkill" cs ON c.course_id = cs.course_id
-        LEFT JOIN "Skill" s        ON cs.skill_id  = s.skill_id
-        WHERE c.status = 1
-        AND c.target_group = $1
-        GROUP BY c.course_id
-        ORDER BY c.created_at DESC
-        `,
-        [group]
-      );
+      let query = "";
+      let values = [];
+
+      // 🔥 EXPLICIT SCHOOL LOGIC
+      if (target_group && target_group.toLowerCase() === "school") {
+
+        query = `
+          SELECT
+            c.*,
+            COALESCE(
+              JSON_AGG(
+                JSON_BUILD_OBJECT('skill_id', s.skill_id, 'name', s.name)
+              ) FILTER (WHERE s.skill_id IS NOT NULL),
+              '[]'
+            ) AS skills
+          FROM "Course" c
+          LEFT JOIN "CourseSkill" cs ON c.course_id = cs.course_id
+          LEFT JOIN "Skill" s ON cs.skill_id = s.skill_id
+          WHERE c.status = 1
+          AND LOWER(c.target_group) = 'school'
+          GROUP BY c.course_id
+          ORDER BY c.created_at DESC
+        `;
+
+      }
+
+      // 🔥 EXPLICIT COLLEGE LOGIC
+      else if (target_group && target_group.toLowerCase() === "college") {
+
+        query = `
+          SELECT
+            c.*,
+            COALESCE(
+              JSON_AGG(
+                JSON_BUILD_OBJECT('skill_id', s.skill_id, 'name', s.name)
+              ) FILTER (WHERE s.skill_id IS NOT NULL),
+              '[]'
+            ) AS skills
+          FROM "Course" c
+          LEFT JOIN "CourseSkill" cs ON c.course_id = cs.course_id
+          LEFT JOIN "Skill" s ON cs.skill_id = s.skill_id
+          WHERE c.status = 1
+          AND LOWER(c.target_group) = 'college'
+          GROUP BY c.course_id
+          ORDER BY c.created_at DESC
+        `;
+
+      }
+
+      // 🔥 DEFAULT → COLLEGE
+      else {
+
+        query = `
+          SELECT
+            c.*,
+            COALESCE(
+              JSON_AGG(
+                JSON_BUILD_OBJECT('skill_id', s.skill_id, 'name', s.name)
+              ) FILTER (WHERE s.skill_id IS NOT NULL),
+              '[]'
+            ) AS skills
+          FROM "Course" c
+          LEFT JOIN "CourseSkill" cs ON c.course_id = cs.course_id
+          LEFT JOIN "Skill" s ON cs.skill_id = s.skill_id
+          WHERE c.status = 1
+          AND LOWER(c.target_group) = 'college'
+          GROUP BY c.course_id
+          ORDER BY c.created_at DESC
+        `;
+
+      }
+
+      const result = await pool.query(query, values);
 
       return res.status(200).json({
         success: true,
@@ -148,7 +199,7 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // ✅ PUT — Update Course
+    // PUT
     // =========================================================
     else if (req.method === "PUT") {
 
@@ -160,29 +211,32 @@ export default async function handler(req, res) {
         target_group
       } = req.body;
 
+      const group = target_group
+        ? target_group.toLowerCase()
+        : null;
+
       const result = await pool.query(
         `
         UPDATE "Course"
         SET title=$1,
             duration=$2,
             description=$3,
-            target_group=$4,
+            target_group=COALESCE($4, target_group),
             updated_at = NOW()
         WHERE course_id=$5
         RETURNING *
         `,
-        [title, duration, description, target_group, course_id]
+        [title, duration, description, group, course_id]
       );
 
       return res.status(200).json({
         success: true,
-        message: "Course updated successfully",
         data: result.rows[0]
       });
     }
 
     // =========================================================
-    // ✅ DELETE — Remove Course
+    // DELETE
     // =========================================================
     else if (req.method === "DELETE") {
 
@@ -195,17 +249,11 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         success: true,
-        message: "Course deleted successfully",
         data: result.rows[0]
       });
     }
 
-    // =========================================================
-    // ❌ METHOD NOT ALLOWED
-    // =========================================================
-    return res.status(405).json({
-      message: "Method not allowed"
-    });
+    return res.status(405).json({ message: "Method not allowed" });
 
   } catch (err) {
     console.error("COURSE API ERROR:", err);
