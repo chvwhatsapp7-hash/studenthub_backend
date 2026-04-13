@@ -1,5 +1,6 @@
 import pool from "../../lib/db";
 import { cors } from "../../lib/cors";
+import { sendNotificationToAll } from "../../lib/sendNotificationToAll";
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -7,7 +8,7 @@ export default async function handler(req, res) {
   try {
 
     // ═══════════════════════════════════════════
-    // POST — Create Job + Skills
+    // POST — Create Job + Skills + Notification
     // ═══════════════════════════════════════════
     if (req.method === "POST") {
       const {
@@ -22,7 +23,7 @@ export default async function handler(req, res) {
         skills = [],
       } = req.body;
 
-      
+      // 🔹 Insert Job
       const jobResult = await pool.query(
         `
         INSERT INTO "Job"
@@ -55,7 +56,7 @@ export default async function handler(req, res) {
 
       const job = jobResult.rows[0];
 
-      // Insert skills
+      // 🔹 Insert skills
       if (skills.length > 0) {
         for (const skill_id of skills) {
           await pool.query(
@@ -68,6 +69,30 @@ export default async function handler(req, res) {
           );
         }
       }
+
+      // =====================================================
+      // 🔔 STORE NOTIFICATION FOR ALL USERS
+      // =====================================================
+      await pool.query(
+        `
+        INSERT INTO "Notification" (user_id, title, message, type, is_read, created_at)
+        SELECT user_id,
+               'New Job Posted',
+               'A new job has been posted. Check it out!',
+               'job',
+               false,
+               NOW()
+        FROM "User"
+        `
+      );
+
+      // =====================================================
+      // 🔥 SEND PUSH TO ALL USERS
+      // =====================================================
+      await sendNotificationToAll(
+        "New Job Posted",
+        "A new job has been posted. Check it out!"
+      );
 
       return res.status(201).json({
         success: true,
@@ -115,7 +140,6 @@ export default async function handler(req, res) {
         skills = [],
       } = req.body;
 
-
       const result = await pool.query(
         `
         UPDATE "Job"
@@ -145,7 +169,7 @@ export default async function handler(req, res) {
         ]
       );
 
-      // Update skills
+      // 🔹 Update skills
       if (skills.length > 0) {
         await pool.query(`DELETE FROM "JobSkill" WHERE job_id = $1`, [job_id]);
 
@@ -175,7 +199,6 @@ export default async function handler(req, res) {
 
       await pool.query(`DELETE FROM "JobSkill" WHERE job_id = $1`, [job_id]);
 
-
       const result = await pool.query(
         `DELETE FROM "Job" WHERE job_id = $1 RETURNING *`,
         [job_id]
@@ -190,7 +213,11 @@ export default async function handler(req, res) {
     return res.status(405).json({ message: "Method not allowed" });
 
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: err.message });
+    console.error("JOB API ERROR:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: err.message
+    });
   }
 }
