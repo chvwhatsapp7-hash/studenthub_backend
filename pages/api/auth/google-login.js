@@ -1,12 +1,12 @@
 import admin from "firebase-admin";
 import jwt from "jsonwebtoken";
 import pool from "../../../lib/db";
-import serviceAccount from "../../../lib/internship-frontend-firebase-adminsdk-fbsvc-2f5d720038.json";
+//import serviceAccount from "../../../lib/internship-frontend-firebase-adminsdk-fbsvc-2f5d720038.json";
 
 // 🔐 Initialize Firebase Admin (only once)
 if (!admin.apps.length) {
   admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
+    credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
   });
 }
 
