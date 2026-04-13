@@ -29,8 +29,13 @@ export default async function handler(req, res) {
         price,
         rating,
         skill_ids,
-        target_group = "college" // ✅ NEW FIELD
+        target_group
       } = req.body;
+
+      console.log("REQ BODY:", req.body);
+console.log("TARGET GROUP RECEIVED:", target_group);
+
+      const group=target_group;
 
       if (!title || !description) {
         return res.status(400).json({
@@ -46,6 +51,7 @@ export default async function handler(req, res) {
 
         // 🔹 Insert course
         const courseResult = await client.query(
+          
           `
           INSERT INTO "Course"
           (title, description, provider, instructor, category, level, duration, course_url, price, rating, target_group, created_at, updated_at)
@@ -53,7 +59,7 @@ export default async function handler(req, res) {
           ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),NOW())
           RETURNING *
           `,
-          [title, description, provider, instructor, category, level, duration, course_url, price, rating, target_group]
+          [title, description, provider, instructor, category, level, duration, course_url, price, rating, group]
         );
 
         const course = courseResult.rows[0];
