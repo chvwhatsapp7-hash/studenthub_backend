@@ -17,12 +17,13 @@ export default async function handler(req, res) {
 
     const token = authHeader.split(" ")[1];
 
-    // ✅ Verify as Google ID token (not Firebase)
+    // ✅ Verify as Google ID token
     const ticket = await client.verifyIdToken({
       idToken: token,
       audience: [
         "710479367870-micu0jc76s5aqg2vfbu80k26b1k65mje.apps.googleusercontent.com",
         "710479367870-12ahpp9e9ugf5q7vu6v9hi16epqv5768.apps.googleusercontent.com",
+        "710479367870-k5l0ksoadstbmkgrp6ffhlmon7jptjtl.apps.googleusercontent.com",
       ],
     });
 
@@ -60,21 +61,21 @@ export default async function handler(req, res) {
       user = result.rows[0];
     }
 
-    // ✅ Generate tokens
+    // ✅ FIXED: use correct Vercel env variable names
     const accessToken = jwt.sign(
       {
         user_id: user.user_id,
         role_id: user.role_id,
         full_name: user.full_name,
       },
-      process.env.JWT_SECRET,
-      { expiresIn: "15m" }
+      process.env.ACCESS_SECRET,                              // ✅ FIXED
+      { expiresIn: process.env.ACCESS_TOKEN_EXPIRES || "15m" } // ✅ FIXED
     );
 
     const refreshToken = jwt.sign(
       { user_id: user.user_id },
-      process.env.JWT_REFRESH_SECRET,
-      { expiresIn: "7d" }
+      process.env.REFRESH_SECRET,                              // ✅ FIXED
+      { expiresIn: process.env.REFRESH_TOKEN_EXPIRES || "7d" } // ✅ FIXED
     );
 
     return res.status(200).json({
