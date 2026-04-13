@@ -93,10 +93,10 @@ export default async function handler(req, res) {
       // =====================================================
       // 🔥 SEND PUSH TO ALL USERS
       // =====================================================
-      await sendNotificationToAll(
-        "New Job Posted",
-        "A new job has been posted. Check it out!"
-      );
+      // await sendNotificationToAll(
+      //   "New Job Posted",
+      //   "A new job has been posted. Check it out!"
+      // );
 
       return res.status(201).json({
         success: true,
