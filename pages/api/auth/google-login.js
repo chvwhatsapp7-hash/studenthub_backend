@@ -1,41 +1,42 @@
-import admin from "firebase-admin";
-import jwt from "jsonwebtoken";
 import pool from "../../../lib/db";
-//import serviceAccount from "../../../lib/internship-frontend-firebase-adminsdk-fbsvc-2f5d720038.json";
+import { cors } from "../../../lib/cors";
+import { generateAccessToken, generateRefreshToken } from "../../../lib/jwt.js";
+import { OAuth2Client } from 'google-auth-library';
+import cookie from "cookie";
 
-// 🔐 Initialize Firebase Admin (only once)
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
-  });
-}
+const client = new OAuth2Client();
 
 export default async function handler(req, res) {
+  if (cors(req, res)) return;
+
+  if (req.method !== "POST") {
+    return res.status(405).json({ message: "Only POST allowed" });
+  }
+
   try {
-    // ✅ Only POST
-    if (req.method !== "POST") {
-      return res.status(405).json({ message: "Method not allowed" });
-    }
-
-    // 🔐 Extract token
     const authHeader = req.headers.authorization;
-
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({ message: "No token provided" });
     }
 
     const token = authHeader.split(" ")[1];
 
-    // ✅ Verify Firebase token
-    const decoded = await admin.auth().verifyIdToken(token);
+    // ✅ Verify Google ID token
+    const ticket = await client.verifyIdToken({
+      idToken: token,
+      audience: [
+        "710479367870-micu0jc76s5aqg2vfbu80k26b1k65mje.apps.googleusercontent.com",
+        "710479367870-12ahpp9e9ugf5q7vu6v9hi16epqv5768.apps.googleusercontent.com",
+        "710479367870-k5l0ksoadstbmkgrp6ffhlmon7jptjtl.apps.googleusercontent.com",
+      ],
+    });
 
-    const email = decoded.email;
-    const name = decoded.name || "User";
+    const payload = ticket.getPayload();
+    const email = payload.email;
+    const name = payload.name || "User";
 
     if (!email) {
-      return res.status(400).json({
-        message: "Invalid token: email missing",
-      });
+      return res.status(400).json({ message: "Invalid token: email missing" });
     }
 
     // 🔍 Check if user exists
@@ -56,57 +57,67 @@ export default async function handler(req, res) {
         });
       }
     } else {
-      const DEFAULT_ROLE = 4;
-
+      // ✅ Create new Google user
       const result = await pool.query(
         `INSERT INTO "User"
          (full_name, email, password_hash, auth_provider, role_id, created_at, updated_at)
          VALUES ($1,$2,$3,$4,$5,NOW(),NOW())
          RETURNING *`,
-        [name, email, null, "GOOGLE", DEFAULT_ROLE]
+        [name, email, null, "GOOGLE", 4]
       );
-
       user = result.rows[0];
     }
 
-    // ✅ Generate Access Token (short-lived)
-    const accessToken = jwt.sign(
-      {
-        user_id: user.user_id,      // ✅ FIXED: was 'userId', Flutter reads 'user_id'
-        role_id: user.role_id,
-        full_name: user.full_name,  // ✅ ADDED: Flutter needs full_name
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: "15m" }          // ✅ FIXED: short-lived like email login
-    );
+    // ✅ Same payload structure as email login
+    const tokenPayload = {
+      user_id:   user.user_id,
+      role_id:   user.role_id,
+      full_name: user.full_name,
+    };
 
-    // ✅ Generate Refresh Token (long-lived)
-    const refreshToken = jwt.sign(
-      {
-        user_id: user.user_id,
-      },
-      process.env.JWT_REFRESH_SECRET,
-      { expiresIn: "7d" }
-    );
+    // ✅ Use same generators as email login
+    const accessToken  = generateAccessToken(tokenPayload);
+    const refreshToken = generateRefreshToken(tokenPayload);
 
+    const isProd = process.env.NODE_ENV === "production";
+
+    // ✅ Set cookies (same as email login)
+    res.setHeader("Set-Cookie", [
+      cookie.serialize("accessToken", accessToken, {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: isProd ? "none" : "lax",
+        path: "/",
+        maxAge: 15 * 60,
+      }),
+      cookie.serialize("refreshToken", refreshToken, {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: isProd ? "none" : "lax",
+        path: "/",
+        maxAge: 7 * 24 * 60 * 60,
+      }),
+    ]);
+
+    // ✅ Return tokens in body for Flutter (same as email login)
     return res.status(200).json({
+      success: true,
       message: "Login successful",
-      token: accessToken,           // Flutter reads data["token"]
+      token: accessToken,
       data: {
-        accessToken,                // ✅ consistent with email login shape
+        accessToken,
         refreshToken,
       },
       user: {
-        user_id: user.user_id,
-        role_id: user.role_id,
+        user_id:   user.user_id,
+        role_id:   user.role_id,
         full_name: user.full_name,
-        email: user.email,
+        email:     user.email,
       },
     });
 
   } catch (err) {
     console.error("Google Login Error:", err.message);
-
     return res.status(500).json({
       message: "Authentication failed",
       error: err.message,
