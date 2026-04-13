@@ -90,6 +90,8 @@ model Course {
   created_at  DateTime           @default(now())
   updated_at  DateTime           @updatedAt
 
+  target_group String @default("college")
+
   status Int @default(1)
 
   enrollments CourseEnrollment[]
@@ -153,6 +155,8 @@ model User {
   userSkills              UserSkill[]
   projects                Project[]
   certificates            Certificate[]
+  devices UserDevice[]
+  notifications Notification[]
 }
 
 model CourseEnrollment {
@@ -321,4 +325,32 @@ model AuditLog {
 
   created_at      DateTime @default(now())
 
+}
+
+model UserDevice {
+  id         Int      @id @default(autoincrement())
+
+  user_id    BigInt
+  token      String
+
+  created_at DateTime @default(now())
+
+  user       User     @relation(fields: [user_id], references: [user_id])
+
+  @@unique([user_id, token])
+}
+
+model Notification {
+  notification_id Int      @id @default(autoincrement())
+
+  user_id         BigInt
+  user            User     @relation(fields: [user_id], references: [user_id])
+
+  title           String
+  message         String
+  type            String   // "job", "internship", "course", "hackathon"
+
+  is_read         Boolean  @default(false)
+
+  created_at      DateTime @default(now())
 }

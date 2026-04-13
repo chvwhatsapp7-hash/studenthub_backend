@@ -76,7 +76,7 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // ✅ POST → APPLY
+    // ✅ POST → APPLY + NOTIFICATION
     // =========================================================
     if (req.method === "POST") {
 
@@ -89,7 +89,7 @@ export default async function handler(req, res) {
         });
       }
 
-      
+      // 🔐 Security check
       if (user.user_id !== Number(user_id)) {
         return res.status(403).json({
           success: false,
@@ -97,7 +97,7 @@ export default async function handler(req, res) {
         });
       }
 
-      
+      // 🔍 Duplicate check
       const checkQuery = `
         SELECT id FROM "Application"
         WHERE user_id = $1
@@ -120,7 +120,7 @@ export default async function handler(req, res) {
         });
       }
 
-      // 📝 Insert
+      // 📝 Insert Application
       const insertQuery = `
         INSERT INTO "Application"
         (user_id, job_id, internship_id, status, applied_at)
@@ -133,6 +133,20 @@ export default async function handler(req, res) {
         job_id || null,
         internship_id || null
       ]);
+
+      // ======================================================
+      // 🔔 STORE NOTIFICATION IN DB
+      // ======================================================
+      const title = "Application Submitted";
+      const message = job_id
+        ? "You applied for a job successfully"
+        : "You applied for an internship successfully";
+
+
+      // ======================================================
+      // 🔥 SEND PUSH NOTIFICATION (FCM)
+      // ======================================================
+      await sendNotification(user_id, title, message);
 
       return res.status(201).json({
         success: true,

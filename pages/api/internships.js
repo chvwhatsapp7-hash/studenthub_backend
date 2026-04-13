@@ -1,15 +1,18 @@
 import pool from "../../lib/db";
 import { cors } from "../../lib/cors";
 import { authenticate } from "../../lib/auth";
+import { sendNotificationToAll } from "../../lib/sendNotificationToAll";
 
 export default async function handler(req, res) {
   const user = authenticate(req, res);
   if (!user) return res.status(401).json({ success: false, message: "Unauthorized" });
+
   if (cors(req, res)) return;
+
   try {
 
     // ═══════════════════════════════════════════
-    //  POST — Create Internship + Link Skills by ID
+    // POST — Create Internship + Skills + Notification
     // ═══════════════════════════════════════════
     if (req.method === "POST") {
       const {
@@ -19,10 +22,10 @@ export default async function handler(req, res) {
         duration,
         stipend,
         description,
-        skill_ids = [], // ✅ array of skill IDs e.g. [1, 3, 7]
+        skill_ids = [],
       } = req.body;
 
-      // 1️⃣ Insert internship
+      // 🔹 Insert internship
       const internResult = await pool.query(`
         INSERT INTO "Internship"
         (title, company_id, location, duration, stipend, description, created_at, updated_at)
@@ -32,7 +35,7 @@ export default async function handler(req, res) {
 
       const intern = internResult.rows[0];
 
-      // 2️⃣ Link skills directly by ID — no name lookup needed
+      // 🔹 Link skills
       if (skill_ids.length > 0) {
         for (const skill_id of skill_ids) {
           await pool.query(`
@@ -43,6 +46,28 @@ export default async function handler(req, res) {
         }
       }
 
+      // =====================================================
+      // 🔔 STORE NOTIFICATION FOR ALL USERS
+      // =====================================================
+      await pool.query(`
+        INSERT INTO "Notification" (user_id, title, message, type, is_read, created_at)
+        SELECT user_id,
+               'New Internship Posted',
+               'A new internship is available. Check it out!',
+               'internship',
+               false,
+               NOW()
+        FROM "User"
+      `);
+
+      // =====================================================
+      // 🔥 SEND PUSH TO ALL USERS
+      // =====================================================
+      await sendNotificationToAll(
+        "New Internship Posted",
+        "A new internship is available. Check it out!"
+      );
+
       return res.status(201).json({
         success: true,
         data: intern,
@@ -50,7 +75,7 @@ export default async function handler(req, res) {
     }
 
     // ═══════════════════════════════════════════
-    //  GET — Fetch All Internships with Skills
+    // GET — Fetch All Internships with Skills
     // ═══════════════════════════════════════════
     else if (req.method === "GET") {
       const result = await pool.query(`
@@ -75,7 +100,7 @@ export default async function handler(req, res) {
     }
 
     // ═══════════════════════════════════════════
-    //  PUT — Update Internship + Re-link Skills by ID
+    // PUT — Update Internship + Skills
     // ═══════════════════════════════════════════
     else if (req.method === "PUT") {
       const {
@@ -86,10 +111,10 @@ export default async function handler(req, res) {
         duration,
         stipend,
         description,
-        skill_ids, // ✅ optional array of skill IDs
+        skill_ids,
       } = req.body;
 
-      // 1️⃣ Update internship
+      // 🔹 Update internship
       const result = await pool.query(`
         UPDATE "Internship"
         SET title=$1,
@@ -103,7 +128,7 @@ export default async function handler(req, res) {
         RETURNING *
       `, [title, company_id, location, duration, stipend, description, internship_id]);
 
-      // 2️⃣ If skill_ids provided — delete old and re-insert
+      // 🔹 Update skills
       if (skill_ids && skill_ids.length > 0) {
         await pool.query(
           `DELETE FROM "InternshipSkill" WHERE internship_id = $1`,
@@ -126,18 +151,18 @@ export default async function handler(req, res) {
     }
 
     // ═══════════════════════════════════════════
-    //  DELETE — Remove Internship + Skills
+    // DELETE — Remove Internship + Skills
     // ═══════════════════════════════════════════
     else if (req.method === "DELETE") {
       const { internship_id } = req.body;
 
-      // 1️⃣ Delete linked skills first
+      // 🔹 Delete skills first
       await pool.query(
         `DELETE FROM "InternshipSkill" WHERE internship_id = $1`,
         [internship_id]
       );
 
-      // 2️⃣ Delete internship
+      // 🔹 Delete internship
       const result = await pool.query(`
         DELETE FROM "Internship"
         WHERE internship_id=$1
@@ -153,7 +178,11 @@ export default async function handler(req, res) {
     return res.status(405).json({ message: "Method not allowed" });
 
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: err.message });
+    console.error("INTERNSHIP API ERROR:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: err.message
+    });
   }
 }
