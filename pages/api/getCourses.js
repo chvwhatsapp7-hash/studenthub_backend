@@ -1,7 +1,7 @@
 import { pool } from "../../lib/database";
 import { cors } from "../../lib/cors";
 import { authenticate } from "../../lib/auth";
-//import { sendNotificationToAll } from "../../lib/sendNotificationToAll";
+import { sendNotificationToAll } from "../../lib/sendNotificationToAll";
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -115,10 +115,10 @@ console.log("TARGET GROUP RECEIVED:", target_group);
         client.release();
 
         // 🔥 Push notification
-        await sendNotificationToAll(
-          "New Course Available",
-          "A new course has been added. Explore now!"
-        );
+       // await sendNotificationToAll(
+         // "New Course Available",
+          //"A new course has been added. Explore now!"
+        //);
 
         return res.status(201).json({
           success: true,
@@ -131,7 +131,6 @@ console.log("TARGET GROUP RECEIVED:", target_group);
 
       } catch (txErr) {
         await client.query("ROLLBACK");
-        client.release();
         throw txErr;
       }
     }
