@@ -89,7 +89,7 @@ export default async function handler(req, res) {
         });
       }
 
-      // 🔐 Security check
+      
       if (user.user_id !== Number(user_id)) {
         return res.status(403).json({
           success: false,
@@ -97,7 +97,7 @@ export default async function handler(req, res) {
         });
       }
 
-      // 🔍 Duplicate check
+      
       const checkQuery = `
         SELECT id FROM "Application"
         WHERE user_id = $1
