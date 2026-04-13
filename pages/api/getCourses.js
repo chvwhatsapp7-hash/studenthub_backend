@@ -1,19 +1,22 @@
 import { pool } from "../../lib/database";
 import { cors } from "../../lib/cors";
 import { authenticate } from "../../lib/auth";
-import { sendNotificationToAll } from "../../lib/sendNotificationToAll";
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
 
-  // ✅ Then authenticate
   const user = authenticate(req, res);
-  if (!user) return res.status(401).json({ success: false, message: "Unauthorized" });
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      message: "Unauthorized"
+    });
+  }
 
   try {
 
     // =========================================================
-    // POST — Create Course + Skills + Notification
+    // ✅ POST — Create Course
     // =========================================================
     if (req.method === "POST") {
 
@@ -32,10 +35,7 @@ export default async function handler(req, res) {
         target_group
       } = req.body;
 
-      console.log("REQ BODY:", req.body);
-console.log("TARGET GROUP RECEIVED:", target_group);
-
-      const group=target_group;
+      const group = target_group || "college";
 
       if (!title || !description) {
         return res.status(400).json({
@@ -51,7 +51,6 @@ console.log("TARGET GROUP RECEIVED:", target_group);
 
         // 🔹 Insert course
         const courseResult = await client.query(
-          
           `
           INSERT INTO "Course"
           (title, description, provider, instructor, category, level, duration, course_url, price, rating, target_group, created_at, updated_at)
@@ -59,7 +58,19 @@ console.log("TARGET GROUP RECEIVED:", target_group);
           ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),NOW())
           RETURNING *
           `,
-          [title, description, provider, instructor, category, level, duration, course_url, price, rating, group]
+          [
+            title,
+            description,
+            provider,
+            instructor,
+            category,
+            level,
+            duration,
+            course_url,
+            price,
+            rating,
+            group
+          ]
         );
 
         const course = courseResult.rows[0];
@@ -67,25 +78,9 @@ console.log("TARGET GROUP RECEIVED:", target_group);
 
         const linkedSkills = [];
 
-        // 🔹 Link skills
+        // 🔹 Link skills (SAFE VERSION)
         if (Array.isArray(skill_ids) && skill_ids.length > 0) {
           for (const skill_id of skill_ids) {
-
-            const skillCheck = await client.query(
-              `SELECT skill_id, name FROM "Skill" WHERE skill_id = $1`,
-              [skill_id]
-            );
-
-            if (skillCheck.rows.length === 0) {
-              await client.query("ROLLBACK");
-              client.release();
-
-              return res.status(400).json({
-                success: false,
-                message: `skill_id ${skill_id} does not exist`,
-              });
-            }
-
             await client.query(
               `
               INSERT INTO "CourseSkill" (course_id, skill_id)
@@ -94,31 +89,11 @@ console.log("TARGET GROUP RECEIVED:", target_group);
               `,
               [course_id, skill_id]
             );
-
-            linkedSkills.push(skillCheck.rows[0].name);
           }
         }
 
-        // 🔔 Store notification
-        await client.query(`
-          INSERT INTO "Notification" (user_id, title, message, type, is_read, created_at)
-          SELECT user_id,
-                 'New Course Available',
-                 'A new course has been added. Explore now!',
-                 'course',
-                 false,
-                 NOW()
-          FROM "User"
-        `);
-
         await client.query("COMMIT");
         client.release();
-
-        // 🔥 Push notification
-        await sendNotificationToAll(
-          "New Course Available",
-          "A new course has been added. Explore now!"
-        );
 
         return res.status(201).json({
           success: true,
@@ -132,18 +107,17 @@ console.log("TARGET GROUP RECEIVED:", target_group);
       } catch (txErr) {
         await client.query("ROLLBACK");
         client.release();
+        console.error("TX ERROR:", txErr);
         throw txErr;
       }
     }
 
     // =========================================================
-    // GET — Fetch Courses (FILTERED)
+    // ✅ GET — Fetch Courses (FILTERED)
     // =========================================================
     else if (req.method === "GET") {
 
       const { target_group } = req.query;
-
-      // Default = college if not provided
       const group = target_group || "college";
 
       const result = await pool.query(
@@ -174,7 +148,7 @@ console.log("TARGET GROUP RECEIVED:", target_group);
     }
 
     // =========================================================
-    // PUT — Update Course
+    // ✅ PUT — Update Course
     // =========================================================
     else if (req.method === "PUT") {
 
@@ -183,7 +157,7 @@ console.log("TARGET GROUP RECEIVED:", target_group);
         title,
         duration,
         description,
-        target_group // ✅ NEW FIELD
+        target_group
       } = req.body;
 
       const result = await pool.query(
@@ -208,7 +182,7 @@ console.log("TARGET GROUP RECEIVED:", target_group);
     }
 
     // =========================================================
-    // DELETE — Remove Course
+    // ✅ DELETE — Remove Course
     // =========================================================
     else if (req.method === "DELETE") {
 
@@ -226,6 +200,9 @@ console.log("TARGET GROUP RECEIVED:", target_group);
       });
     }
 
+    // =========================================================
+    // ❌ METHOD NOT ALLOWED
+    // =========================================================
     return res.status(405).json({
       message: "Method not allowed"
     });
