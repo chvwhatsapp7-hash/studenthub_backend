@@ -1,21 +1,29 @@
-import pool from "../../lib/db";
+import { pool } from "../../lib/database";
 import { cors } from "../../lib/cors";
 import { authenticate } from "../../lib/auth";
-//import { sendNotificationToAll } from "../../lib/sendNotificationToAll";
+import { sendNotificationToAll } from "../../lib/sendNotificationToAll";
 
 export default async function handler(req, res) {
+
+  // ✅ CORS FIRST
   if (cors(req, res)) return;
 
-  // ✅ Then authenticate
+  // ✅ AUTH
   const user = authenticate(req, res);
-  if (!user) return res.status(401).json({ success: false, message: "Unauthorized" });
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      message: "Unauthorized"
+    });
+  }
 
   try {
 
-    // ═══════════════════════════════════════════
+    // =========================================================
     // POST — Create Internship + Skills + Notification
-    // ═══════════════════════════════════════════
+    // =========================================================
     if (req.method === "POST") {
+
       const {
         title,
         company_id,
@@ -26,59 +34,102 @@ export default async function handler(req, res) {
         skill_ids = [],
       } = req.body;
 
+      // ✅ VALIDATION
+      if (!title || !company_id || !location || !description) {
+        return res.status(400).json({
+          success: false,
+          message: "Missing required fields"
+        });
+      }
+
+      console.log("📥 Creating internship:", title);
+
       // 🔹 Insert internship
-      const internResult = await pool.query(`
+      const internResult = await pool.query(
+        `
         INSERT INTO "Internship"
         (title, company_id, location, duration, stipend, description, created_at, updated_at)
         VALUES ($1,$2,$3,$4,$5,$6,NOW(),NOW())
         RETURNING *
-      `, [title, company_id, location, duration, stipend, description]);
+        `,
+        [title, company_id, location, duration, stipend, description]
+      );
 
       const intern = internResult.rows[0];
 
       // 🔹 Link skills
       if (skill_ids.length > 0) {
         for (const skill_id of skill_ids) {
-          await pool.query(`
+          await pool.query(
+            `
             INSERT INTO "InternshipSkill"(internship_id, skill_id)
             VALUES ($1, $2)
             ON CONFLICT DO NOTHING
-          `, [intern.internship_id, skill_id]);
+            `,
+            [intern.internship_id, skill_id]
+          );
         }
       }
 
       // =====================================================
-      // 🔔 STORE NOTIFICATION FOR ALL USERS
+      // 🔔 STORE NOTIFICATION (FULL MODEL SUPPORT)
       // =====================================================
-      await pool.query(`
-        INSERT INTO "Notification" (user_id, title, message, type, is_read, created_at)
-        SELECT user_id,
-               'New Internship Posted',
-               'A new internship is available. Check it out!',
-               'internship',
-               false,
-               NOW()
-        FROM "User"
-      `);
+      try {
+        console.log("🔥 Inserting internship notifications...");
+
+        const notifResult = await pool.query(
+          `
+          INSERT INTO "Notification"
+          (user_id, title, message, type, entity_id, redirect_url, is_read, created_at)
+          SELECT user_id,
+                 $1,
+                 $2,
+                 'internship',
+                 $3,
+                 $4,
+                 false,
+                 NOW()
+          FROM "User"
+          RETURNING notification_id
+          `,
+          [
+            "New Internship Posted",
+            `${title} internship is now available`,
+            intern.internship_id,
+            `/internships/${intern.internship_id}`
+          ]
+        );
+
+        console.log("✅ Notifications inserted:", notifResult.rowCount);
+
+      } catch (err) {
+        console.error("❌ Notification insert failed:", err.message);
+      }
 
       // =====================================================
-      // 🔥 SEND PUSH TO ALL USERS
+      // 🔥 PUSH NOTIFICATION (SAFE)
       // =====================================================
-      await sendNotificationToAll(
-        "New Internship Posted",
-        "A new internship is available. Check it out!"
-      );
+      try {
+        await sendNotificationToAll(
+          "New Internship Posted",
+          `${title} internship is now available`
+        );
+      } catch (err) {
+        console.error("❌ Push failed:", err.message);
+      }
 
       return res.status(201).json({
         success: true,
-        data: intern,
+        message: "Internship created successfully",
+        data: intern
       });
     }
 
-    // ═══════════════════════════════════════════
+    // =========================================================
     // GET — Fetch All Internships with Skills
-    // ═══════════════════════════════════════════
+    // =========================================================
     else if (req.method === "GET") {
+
       const result = await pool.query(`
         SELECT
           i.*,
@@ -100,10 +151,11 @@ export default async function handler(req, res) {
       });
     }
 
-    // ═══════════════════════════════════════════
+    // =========================================================
     // PUT — Update Internship + Skills
-    // ═══════════════════════════════════════════
+    // =========================================================
     else if (req.method === "PUT") {
+
       const {
         internship_id,
         title,
@@ -115,8 +167,8 @@ export default async function handler(req, res) {
         skill_ids,
       } = req.body;
 
-      // 🔹 Update internship
-      const result = await pool.query(`
+      const result = await pool.query(
+        `
         UPDATE "Internship"
         SET title=$1,
             company_id=$2,
@@ -127,51 +179,50 @@ export default async function handler(req, res) {
             updated_at=NOW()
         WHERE internship_id=$7
         RETURNING *
-      `, [title, company_id, location, duration, stipend, description, internship_id]);
+        `,
+        [title, company_id, location, duration, stipend, description, internship_id]
+      );
 
       // 🔹 Update skills
       if (skill_ids && skill_ids.length > 0) {
-        await pool.query(
-          `DELETE FROM "InternshipSkill" WHERE internship_id = $1`,
-          [internship_id]
-        );
+        await pool.query(`DELETE FROM "InternshipSkill" WHERE internship_id = $1`, [internship_id]);
 
         for (const skill_id of skill_ids) {
-          await pool.query(`
+          await pool.query(
+            `
             INSERT INTO "InternshipSkill"(internship_id, skill_id)
             VALUES ($1, $2)
             ON CONFLICT DO NOTHING
-          `, [internship_id, skill_id]);
+            `,
+            [internship_id, skill_id]
+          );
         }
       }
 
       return res.status(200).json({
         success: true,
+        message: "Internship updated successfully",
         data: result.rows[0],
       });
     }
 
-    // ═══════════════════════════════════════════
-    // DELETE — Remove Internship + Skills
-    // ═══════════════════════════════════════════
+    // =========================================================
+    // DELETE — Remove Internship
+    // =========================================================
     else if (req.method === "DELETE") {
+
       const { internship_id } = req.body;
 
-      // 🔹 Delete skills first
-      await pool.query(
-        `DELETE FROM "InternshipSkill" WHERE internship_id = $1`,
+      await pool.query(`DELETE FROM "InternshipSkill" WHERE internship_id = $1`, [internship_id]);
+
+      const result = await pool.query(
+        `DELETE FROM "Internship" WHERE internship_id=$1 RETURNING *`,
         [internship_id]
       );
 
-      // 🔹 Delete internship
-      const result = await pool.query(`
-        DELETE FROM "Internship"
-        WHERE internship_id=$1
-        RETURNING *
-      `, [internship_id]);
-
       return res.status(200).json({
         success: true,
+        message: "Internship deleted successfully",
         data: result.rows[0],
       });
     }
@@ -179,7 +230,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ message: "Method not allowed" });
 
   } catch (err) {
-    console.error("INTERNSHIP API ERROR:", err);
+    console.error("🔥 INTERNSHIP API ERROR:", err);
 
     return res.status(500).json({
       success: false,
