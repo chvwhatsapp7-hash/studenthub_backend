@@ -57,25 +57,33 @@ export default async function handler(req, res) {
       const hackathon = result.rows[0];
 
       // =====================================================
-      // 🔔 STORE NOTIFICATION (WITH DEBUG)
+      // 🔔 STORE NOTIFICATION (FULL MODEL SUPPORT)
       // =====================================================
       try {
-        console.log("🔥 Attempting to insert notifications...");
+        console.log("🔥 Inserting notifications...");
 
-        const notifResult = await pool.query(`
-          INSERT INTO "Notification" (user_id, title, message, type, is_read, created_at)
+        const notifResult = await pool.query(
+          `
+          INSERT INTO "Notification"
+          (user_id, title, message, type, entity_id, redirect_url, is_read, created_at)
           SELECT user_id,
                  $1,
                  $2,
                  'hackathon',
+                 $3,
+                 $4,
                  false,
                  NOW()
           FROM "User"
           RETURNING notification_id
-        `, [
-          "New Hackathon Announced",
-          `${title} is now live. Participate now!`
-        ]);
+          `,
+          [
+            "New Hackathon Announced",
+            `${title} is now live. Participate now!`,
+            hackathon.hackathon_id,
+            `/hackathons/${hackathon.hackathon_id}`
+          ]
+        );
 
         console.log("✅ Notifications inserted:", notifResult.rowCount);
 
