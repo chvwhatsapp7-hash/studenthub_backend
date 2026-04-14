@@ -4,10 +4,17 @@ import { authenticate } from "../../lib/auth";
 import { sendNotificationToAll } from "../../lib/sendNotificationToAll";
 
 export default async function handler(req, res) {
-  const user = authenticate(req, res);
-  if (!user) return res.status(401).json({ success: false, message: "Unauthorized" });
-
+  // ✅ CORS FIRST
   if (cors(req, res)) return;
+
+  // ✅ THEN AUTH
+  const user = authenticate(req, res);
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      message: "Unauthorized"
+    });
+  }
 
   try {
 
@@ -25,6 +32,14 @@ export default async function handler(req, res) {
         description
       } = req.body;
 
+      // ✅ BASIC VALIDATION
+      if (!title || !organizer || !location || !start_date || !end_date) {
+        return res.status(400).json({
+          success: false,
+          message: "Missing required fields"
+        });
+      }
+
       // 🔹 Insert Hackathon
       const result = await pool.query(
         `
@@ -39,26 +54,37 @@ export default async function handler(req, res) {
       const hackathon = result.rows[0];
 
       // =====================================================
-      // 🔔 STORE NOTIFICATION FOR ALL USERS
+      // 🔔 STORE NOTIFICATION (SAFE)
       // =====================================================
-      await pool.query(`
-        INSERT INTO "Notification" (user_id, title, message, type, is_read, created_at)
-        SELECT user_id,
-               'New Hackathon Announced',
-               'A new hackathon is live. Participate now!',
-               'hackathon',
-               false,
-               NOW()
-        FROM "User"
-      `);
+      try {
+        await pool.query(`
+          INSERT INTO "Notification" (user_id, title, message, type, is_read, created_at)
+          SELECT user_id,
+                 $1,
+                 $2,
+                 'hackathon',
+                 false,
+                 NOW()
+          FROM "User"
+        `, [
+          "New Hackathon Announced",
+          `${title} is now live. Participate now!`
+        ]);
+      } catch (err) {
+        console.error("Notification insert failed:", err.message);
+      }
 
       // =====================================================
-      // 🔥 SEND PUSH TO ALL USERS
+      // 🔥 SEND PUSH (SAFE WRAPPER)
       // =====================================================
-      await sendNotificationToAll(
-        "New Hackathon Announced",
-        "A new hackathon is live. Participate now!"
-      );
+      try {
+        await sendNotificationToAll(
+          "New Hackathon Announced",
+          `${title} is now live. Participate now!`
+        );
+      } catch (err) {
+        console.error("Push failed:", err.message);
+      }
 
       return res.status(201).json({
         success: true,
