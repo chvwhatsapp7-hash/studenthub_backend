@@ -1,13 +1,14 @@
 import { pool } from "../../lib/database";
 import { cors } from "../../lib/cors";
 import { authenticate } from "../../lib/auth";
+import { sendNotificationToAll } from "../../lib/sendNotificationToAll";
 
 export default async function handler(req, res) {
 
   // ✅ CORS FIRST
   if (cors(req, res)) return;
 
-  // ✅ AUTH (ENABLE if needed)
+  // ✅ AUTH (optional — enable if needed)
   // const user = authenticate(req, res);
   // if (!user) {
   //   return res.status(401).json({
@@ -34,7 +35,7 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // POST — Create Company
+    // POST — Create Company + Notification
     // =========================================================
     else if (req.method === "POST") {
 
@@ -57,6 +58,7 @@ export default async function handler(req, res) {
         });
       }
 
+      // 🔹 Insert Company
       const result = await pool.query(
         `
         INSERT INTO "Company"
@@ -76,12 +78,61 @@ export default async function handler(req, res) {
         ]
       );
 
+      const company = result.rows[0];
+
       console.log("📥 Company created:", name);
+
+      // =====================================================
+      // 🔔 STORE NOTIFICATION (FULL MODEL SUPPORT)
+      // =====================================================
+      try {
+        console.log("🔥 Inserting company notifications...");
+
+        const notifResult = await pool.query(
+          `
+          INSERT INTO "Notification"
+          (user_id, title, message, type, entity_id, redirect_url, is_read, created_at)
+          SELECT user_id,
+                 $1,
+                 $2,
+                 'company',
+                 $3,
+                 $4,
+                 false,
+                 NOW()
+          FROM "User"
+          RETURNING notification_id
+          `,
+          [
+            "New Company Added",
+            `${name} has joined the platform`,
+            company.company_id,
+            `/companies/${company.company_id}`
+          ]
+        );
+
+        console.log("✅ Notifications inserted:", notifResult.rowCount);
+
+      } catch (err) {
+        console.error("❌ Notification insert failed:", err.message);
+      }
+
+      // =====================================================
+      // 🔥 PUSH NOTIFICATION (SAFE)
+      // =====================================================
+      try {
+        await sendNotificationToAll(
+          "New Company Added",
+          `${name} has joined the platform`
+        );
+      } catch (err) {
+        console.error("❌ Push failed:", err.message);
+      }
 
       return res.status(201).json({
         success: true,
         message: "Company created successfully",
-        data: result.rows[0]
+        data: company
       });
     }
 
