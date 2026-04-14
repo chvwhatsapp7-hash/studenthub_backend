@@ -1,6 +1,7 @@
-import pool from "../../lib/db";
+import { pool } from "../../lib/database";
 import { cors } from "../../lib/cors";
 import { authenticate } from "../../lib/auth";
+import { sendNotification } from "../../lib/sendNotifications"; // optional (single user push)
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -16,7 +17,7 @@ export default async function handler(req, res) {
   try {
 
     // =========================================================
-    // ✅ GET → FETCH USER APPLICATIONS
+    // GET — FETCH USER APPLICATIONS
     // =========================================================
     if (req.method === "GET") {
 
@@ -29,7 +30,6 @@ export default async function handler(req, res) {
         });
       }
 
-      // 🔐 Security check — ✅ FIXED: both sides cast to Number
       if (Number(user.user_id) !== Number(user_id)) {
         return res.status(403).json({
           success: false,
@@ -57,7 +57,6 @@ export default async function handler(req, res) {
           END AS type
 
         FROM "Application" a
-
         LEFT JOIN "Job" j ON a.job_id = j.job_id
         LEFT JOIN "Internship" i ON a.internship_id = i.internship_id
         LEFT JOIN "Company" c 
@@ -76,7 +75,7 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // ✅ POST → APPLY + NOTIFICATION
+    // POST — APPLY + NOTIFICATION
     // =========================================================
     if (req.method === "POST") {
 
@@ -89,7 +88,6 @@ export default async function handler(req, res) {
         });
       }
 
-      // 🔐 Security check — ✅ FIXED: both sides cast to Number
       if (Number(user.user_id) !== Number(user_id)) {
         return res.status(403).json({
           success: false,
@@ -134,28 +132,66 @@ export default async function handler(req, res) {
         internship_id || null
       ]);
 
-      // ======================================================
-      // 🔔 STORE NOTIFICATION IN DB
-      // ======================================================
-      const title = "Application Submitted";
-      const message = job_id
-        ? "You applied for a job successfully"
-        : "You applied for an internship successfully";
+      const application = result.rows[0];
 
       // ======================================================
-      // 🔥 SEND PUSH NOTIFICATION (FCM)
+      // 🔔 STORE NOTIFICATION (SINGLE USER)
       // ======================================================
-     // await sendNotification(user_id, title, message);
+      try {
+        const isJob = !!job_id;
+
+        const notifTitle = "Application Submitted";
+        const notifMessage = isJob
+          ? "You applied for a job successfully"
+          : "You applied for an internship successfully";
+
+        const entityId = isJob ? job_id : internship_id;
+        const redirectUrl = isJob
+          ? `/jobs/${job_id}`
+          : `/internships/${internship_id}`;
+
+        await pool.query(
+          `
+          INSERT INTO "Notification"
+          (user_id, title, message, type, entity_id, redirect_url, is_read, created_at)
+          VALUES ($1, $2, $3, $4, $5, $6, false, NOW())
+          `,
+          [
+            user_id,
+            notifTitle,
+            notifMessage,
+            isJob ? "job" : "internship",
+            entityId,
+            redirectUrl
+          ]
+        );
+
+      } catch (err) {
+        console.error("❌ Notification insert failed:", err.message);
+      }
+
+      // ======================================================
+      // 🔥 PUSH (OPTIONAL — SAFE)
+      // ======================================================
+      try {
+        await sendNotification(
+          user_id,
+          "Application Submitted",
+          "Your application was submitted successfully"
+        );
+      } catch (err) {
+        console.error("❌ Push failed:", err.message);
+      }
 
       return res.status(201).json({
         success: true,
         message: "Application submitted successfully",
-        data: result.rows[0]
+        data: application
       });
     }
 
     // =========================================================
-    // ✅ DELETE → WITHDRAW APPLICATION
+    // DELETE — WITHDRAW APPLICATION
     // =========================================================
     if (req.method === "DELETE") {
 
@@ -168,7 +204,6 @@ export default async function handler(req, res) {
         });
       }
 
-      // 🔐 Security check — ✅ FIXED: both sides cast to Number
       if (Number(user.user_id) !== Number(user_id)) {
         return res.status(403).json({
           success: false,
@@ -205,9 +240,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // =========================================================
-    // ❌ METHOD NOT ALLOWED
-    // =========================================================
     return res.status(405).json({
       success: false,
       message: "Method not allowed"
@@ -215,6 +247,7 @@ export default async function handler(req, res) {
 
   } catch (err) {
     console.error("APPLICATION ERROR:", err);
+
     return res.status(500).json({
       success: false,
       message: err.message
