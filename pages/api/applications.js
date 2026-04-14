@@ -29,8 +29,8 @@ export default async function handler(req, res) {
         });
       }
 
-      // 🔐 Security check
-      if (user.user_id !== Number(user_id)) {
+      // 🔐 Security check — ✅ FIXED: both sides cast to Number
+      if (Number(user.user_id) !== Number(user_id)) {
         return res.status(403).json({
           success: false,
           message: "Forbidden"
@@ -89,8 +89,8 @@ export default async function handler(req, res) {
         });
       }
 
-      // 🔐 Security check
-      if (user.user_id !== Number(user_id)) {
+      // 🔐 Security check — ✅ FIXED: both sides cast to Number
+      if (Number(user.user_id) !== Number(user_id)) {
         return res.status(403).json({
           success: false,
           message: "Forbidden"
@@ -109,8 +109,8 @@ export default async function handler(req, res) {
 
       const existing = await pool.query(checkQuery, [
         user_id,
-        job_id,
-        internship_id
+        job_id ?? null,
+        internship_id ?? null
       ]);
 
       if (existing.rows.length > 0) {
@@ -142,11 +142,10 @@ export default async function handler(req, res) {
         ? "You applied for a job successfully"
         : "You applied for an internship successfully";
 
-
       // ======================================================
       // 🔥 SEND PUSH NOTIFICATION (FCM)
       // ======================================================
-      await sendNotification(user_id, title, message);
+     // await sendNotification(user_id, title, message);
 
       return res.status(201).json({
         success: true,
@@ -169,8 +168,8 @@ export default async function handler(req, res) {
         });
       }
 
-      // 🔐 Security check
-      if (user.user_id !== Number(user_id)) {
+      // 🔐 Security check — ✅ FIXED: both sides cast to Number
+      if (Number(user.user_id) !== Number(user_id)) {
         return res.status(403).json({
           success: false,
           message: "Forbidden"
@@ -189,8 +188,8 @@ export default async function handler(req, res) {
 
       const result = await pool.query(deleteQuery, [
         user_id,
-        job_id,
-        internship_id
+        job_id ?? null,
+        internship_id ?? null
       ]);
 
       if (result.rows.length === 0) {
@@ -216,7 +215,6 @@ export default async function handler(req, res) {
 
   } catch (err) {
     console.error("APPLICATION ERROR:", err);
-
     return res.status(500).json({
       success: false,
       message: err.message
