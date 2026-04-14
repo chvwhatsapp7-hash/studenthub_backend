@@ -1,11 +1,12 @@
-import {pool} from "../../../lib/database";
-import {cors} from "../../../lib/cors";
+import { pool } from "../../../lib/database";
+import { cors } from "../../../lib/cors";
 import { authenticate } from "../../../lib/auth";
 
 export default async function handler(req, res) {
   const user = authenticate(req, res);
   if (!user) return res.status(401).json({ success: false, message: "Unauthorized" });
-  if(cors(req, res)) return;
+  if (cors(req, res)) return;
+
   try {
 
     // =========================================================
@@ -15,12 +16,11 @@ export default async function handler(req, res) {
 
       const { user_id } = req.query;
 
-      if (!user_id) {
-        return res.status(400).json({
-          success: false,
-          message: "user_id is required"
-        });
+      // ✅ FIXED: rejects "null" string, undefined, non-numeric
+      if (!user_id || user_id === 'null' || user_id === 'undefined' || isNaN(Number(user_id))) {
+        return res.status(400).json({ success: false, message: "user_id is required" });
       }
+      const parsedUserId = parseInt(user_id, 10); // ✅ safe integer
 
       const userQuery = `
         SELECT u.*, r.role_name
@@ -28,16 +28,13 @@ export default async function handler(req, res) {
         JOIN "Role" r ON u.role_id = r.role_id
         WHERE u.user_id = $1
       `;
-      const userResult = await pool.query(userQuery, [user_id]);
+      const userResult = await pool.query(userQuery, [parsedUserId]);
 
       if (userResult.rows.length === 0) {
-        return res.status(404).json({
-          success: false,
-          message: "User not found"
-        });
+        return res.status(404).json({ success: false, message: "User not found" });
       }
 
-      const user = userResult.rows[0];
+      const userRow = userResult.rows[0];
 
       const applicationQuery = `
         SELECT 
@@ -54,7 +51,7 @@ export default async function handler(req, res) {
         WHERE a.user_id = $1
         ORDER BY a.applied_at DESC
       `;
-      const applicationResult = await pool.query(applicationQuery, [user_id]);
+      const applicationResult = await pool.query(applicationQuery, [parsedUserId]);
 
       const courseQuery = `
         SELECT 
@@ -65,7 +62,7 @@ export default async function handler(req, res) {
         WHERE ce.user_id = $1
         ORDER BY ce.enrollment_date DESC
       `;
-      const courseResult = await pool.query(courseQuery, [user_id]);
+      const courseResult = await pool.query(courseQuery, [parsedUserId]);
 
       const hackathonQuery = `
         SELECT 
@@ -76,7 +73,7 @@ export default async function handler(req, res) {
         WHERE hp.user_id = $1
         ORDER BY hp.registration_date DESC
       `;
-      const hackathonResult = await pool.query(hackathonQuery, [user_id]);
+      const hackathonResult = await pool.query(hackathonQuery, [parsedUserId]);
 
       const certificateQuery = `
         SELECT certificate_id, title, issuer, issue_date, file_url, created_at
@@ -84,7 +81,7 @@ export default async function handler(req, res) {
         WHERE user_id = $1
         ORDER BY created_at DESC
       `;
-      const certificateResult = await pool.query(certificateQuery, [user_id]);
+      const certificateResult = await pool.query(certificateQuery, [parsedUserId]);
 
       const projectQuery = `
         SELECT project_id, title, description, created_at
@@ -92,7 +89,7 @@ export default async function handler(req, res) {
         WHERE user_id = $1
         ORDER BY created_at DESC
       `;
-      const projectResult = await pool.query(projectQuery, [user_id]);
+      const projectResult = await pool.query(projectQuery, [parsedUserId]);
 
       const skillQuery = `
         SELECT 
@@ -105,19 +102,19 @@ export default async function handler(req, res) {
         WHERE us.user_id = $1
         ORDER BY us.proficiency DESC
       `;
-      const skillResult = await pool.query(skillQuery, [user_id]);
+      const skillResult = await pool.query(skillQuery, [parsedUserId]);
 
       return res.status(200).json({
         success: true,
         data: {
-          user,
+          user: userRow,
           applications: applicationResult.rows,
           courses: courseResult.rows,
           hackathons: hackathonResult.rows,
           certificates: certificateResult.rows,
           projects: projectResult.rows,
-          skills: skillResult.rows
-        }
+          skills: skillResult.rows,
+        },
       });
     }
 
@@ -128,14 +125,12 @@ export default async function handler(req, res) {
 
       const { user_id, skills, ...fields } = req.body;
 
-      if (!user_id) {
-        return res.status(400).json({
-          success: false,
-          message: "user_id is required"
-        });
+      // ✅ FIXED: rejects "null" string, undefined, non-numeric
+      if (!user_id || user_id === 'null' || user_id === 'undefined' || isNaN(Number(user_id))) {
+        return res.status(400).json({ success: false, message: "user_id is required" });
       }
+      const parsedUserId = parseInt(user_id, 10); // ✅ safe integer
 
-      // ✅ Validate skills if provided
       if (skills !== undefined && skills.length > 0) {
         const isValid = skills.every(
           (s) =>
@@ -147,24 +142,15 @@ export default async function handler(req, res) {
         if (!isValid) {
           return res.status(400).json({
             success: false,
-            message: "Each skill must have a numeric skill_id and proficiency (1–5)"
+            message: "Each skill must have a numeric skill_id and proficiency (1–5)",
           });
         }
       }
 
       const allowedFields = [
-        "full_name",
-        "email",
-        "phone",
-        "university",
-        "degree",
-        "graduation_year",
-        "resume_url",
-        "linkedin_url",
-        "github_url",
-        "about_me",
-        "address",
-        "age"
+        "full_name", "email", "phone", "university", "degree",
+        "graduation_year", "resume_url", "linkedin_url", "github_url",
+        "about_me", "address", "age",
       ];
 
       const updates = Object.entries(fields).filter(
@@ -175,25 +161,19 @@ export default async function handler(req, res) {
           value !== ""
       );
 
-      // ✅ Must have at least user fields OR skills to update
       if (updates.length === 0 && skills === undefined) {
-        return res.status(400).json({
-          success: false,
-          message: "No valid fields provided to update"
-        });
+        return res.status(400).json({ success: false, message: "No valid fields provided to update" });
       }
 
-      // ✅ Use transaction for atomic user + skills update
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
 
         let updatedUser = null;
 
-        // 1. Update user fields if any provided
         if (updates.length > 0) {
           let query = `UPDATE "User" SET `;
-          let values = [user_id];
+          let values = [parsedUserId]; // ✅ parsedUserId
 
           const setClauses = updates.map(([key, value], index) => {
             values.push(value);
@@ -203,18 +183,11 @@ export default async function handler(req, res) {
           query += setClauses.join(", ") + `, updated_at = NOW() WHERE user_id = $1 RETURNING *`;
 
           const result = await client.query(query, values);
-
-          if (result.rowCount === 0) {
-            throw new Error("User not found");
-          }
-
+          if (result.rowCount === 0) throw new Error("User not found");
           updatedUser = result.rows[0];
         }
 
-        // 2. Add / update skills if provided (NO DELETE — only upsert)
         if (skills !== undefined && skills.length > 0) {
-
-          // Verify all skill_ids exist in Skill table
           const skillIds = skills.map((s) => s.skill_id);
           const skillCheck = await client.query(
             `SELECT skill_id FROM "Skill" WHERE skill_id = ANY($1::int[])`,
@@ -225,11 +198,10 @@ export default async function handler(req, res) {
             throw new Error("One or more skill_ids are invalid");
           }
 
-          // Bulk upsert — adds new skill OR updates proficiency if already exists
           const values = [];
           const placeholders = skills.map((s, i) => {
             const base = i * 3;
-            values.push(user_id, s.skill_id, s.proficiency);
+            values.push(parsedUserId, s.skill_id, s.proficiency); // ✅ parsedUserId
             return `($${base + 1}, $${base + 2}, $${base + 3})`;
           });
 
@@ -249,8 +221,8 @@ export default async function handler(req, res) {
           message: "Profile updated successfully",
           data: {
             ...(updatedUser && { user: updatedUser }),
-            skills_updated: skills !== undefined ? skills.length : null
-          }
+            skills_updated: skills !== undefined ? skills.length : null,
+          },
         });
 
       } catch (txErr) {
@@ -264,16 +236,10 @@ export default async function handler(req, res) {
     // =========================================================
     // ❌ METHOD NOT ALLOWED
     // =========================================================
-    return res.status(405).json({
-      success: false,
-      message: "Method not allowed"
-    });
+    return res.status(405).json({ success: false, message: "Method not allowed" });
 
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({
-      success: false,
-      message: err.message
-    });
+    console.error("PROFILE ERROR:", err);
+    return res.status(500).json({ success: false, message: err.message });
   }
 }
