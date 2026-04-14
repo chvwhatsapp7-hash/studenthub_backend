@@ -348,9 +348,14 @@ model Notification {
 
   title           String
   message         String
-  type            String   // "job", "internship", "course", "hackathon"
 
-  is_read         Boolean  @default(false)
+  type            String?   @db.VarChar(50) // job, internship, course, hackathon
 
-  created_at      DateTime @default(now())
+  is_read         Boolean   @default(false)
+
+  // Optional (very useful for navigation)
+  entity_id       Int?      // e.g., job_id / course_id / hackathon_id
+  redirect_url    String?   // deep link for frontend navigation
+
+  created_at      DateTime  @default(now())
 }

@@ -4,10 +4,11 @@ import { authenticate } from "../../lib/auth";
 import { sendNotificationToAll } from "../../lib/sendNotificationToAll";
 
 export default async function handler(req, res) {
+
   // ✅ CORS FIRST
   if (cors(req, res)) return;
 
-  // ✅ THEN AUTH
+  // ✅ AUTH
   const user = authenticate(req, res);
   if (!user) {
     return res.status(401).json({
@@ -32,13 +33,15 @@ export default async function handler(req, res) {
         description
       } = req.body;
 
-      // ✅ BASIC VALIDATION
+      // ✅ VALIDATION
       if (!title || !organizer || !location || !start_date || !end_date) {
         return res.status(400).json({
           success: false,
           message: "Missing required fields"
         });
       }
+
+      console.log("📥 Creating hackathon:", title);
 
       // 🔹 Insert Hackathon
       const result = await pool.query(
@@ -54,28 +57,42 @@ export default async function handler(req, res) {
       const hackathon = result.rows[0];
 
       // =====================================================
-      // 🔔 STORE NOTIFICATION (SAFE)
+      // 🔔 STORE NOTIFICATION (FULL MODEL SUPPORT)
       // =====================================================
       try {
-        await pool.query(`
-          INSERT INTO "Notification" (user_id, title, message, type, is_read, created_at)
+        console.log("🔥 Inserting notifications...");
+
+        const notifResult = await pool.query(
+          `
+          INSERT INTO "Notification"
+          (user_id, title, message, type, entity_id, redirect_url, is_read, created_at)
           SELECT user_id,
                  $1,
                  $2,
                  'hackathon',
+                 $3,
+                 $4,
                  false,
                  NOW()
           FROM "User"
-        `, [
-          "New Hackathon Announced",
-          `${title} is now live. Participate now!`
-        ]);
+          RETURNING notification_id
+          `,
+          [
+            "New Hackathon Announced",
+            `${title} is now live. Participate now!`,
+            hackathon.hackathon_id,
+            `/hackathons/${hackathon.hackathon_id}`
+          ]
+        );
+
+        console.log("✅ Notifications inserted:", notifResult.rowCount);
+
       } catch (err) {
-        console.error("Notification insert failed:", err.message);
+        console.error("❌ Notification insert failed:", err.message);
       }
 
       // =====================================================
-      // 🔥 SEND PUSH (SAFE WRAPPER)
+      // 🔥 PUSH NOTIFICATION (SAFE)
       // =====================================================
       try {
         await sendNotificationToAll(
@@ -83,7 +100,7 @@ export default async function handler(req, res) {
           `${title} is now live. Participate now!`
         );
       } catch (err) {
-        console.error("Push failed:", err.message);
+        console.error("❌ Push failed:", err.message);
       }
 
       return res.status(201).json({
@@ -171,7 +188,7 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
-    console.error("HACKATHON API ERROR:", err);
+    console.error("🔥 HACKATHON API ERROR:", err);
 
     return res.status(500).json({
       success: false,
