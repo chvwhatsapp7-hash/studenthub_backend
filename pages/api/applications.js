@@ -145,7 +145,7 @@ export default async function handler(req, res) {
       // ======================================================
       // 🔥 SEND PUSH NOTIFICATION (FCM)
       // ======================================================
-      await sendNotification(user_id, title, message);
+     // await sendNotification(user_id, title, message);
 
       return res.status(201).json({
         success: true,
