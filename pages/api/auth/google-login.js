@@ -63,7 +63,7 @@ export default async function handler(req, res) {
          (full_name, email, password_hash, auth_provider, role_id, created_at, updated_at)
          VALUES ($1,$2,$3,$4,$5,NOW(),NOW())
          RETURNING *`,
-        [name, email, null, "GOOGLE", 4]
+        [name, email, null, "GOOGLE", 0]
       );
       user = result.rows[0];
     }
