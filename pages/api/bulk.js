@@ -233,6 +233,106 @@ export default async function handler(req, res) {
         });
       }
 
+      // ───────── COURSES ─────────
+if (type === "courses") {
+
+  const query = `
+    SELECT
+      c.course_id,
+      c.title,
+      c.provider,
+      c.instructor,
+      c.category,
+      c.level,
+      c.duration,
+      c.target_group,
+      c.created_at,
+      CASE
+        WHEN c.status = 1 THEN 'active'
+        ELSE 'inactive'
+      END AS status
+    FROM "Course" c
+    WHERE ($3 = '' OR c.title ILIKE '%' || $3 || '%'
+      OR c.provider ILIKE '%' || $3 || '%'
+      OR c.category ILIKE '%' || $3 || '%')
+    ORDER BY c.created_at DESC
+    LIMIT $1 OFFSET $2
+  `;
+
+  const countQuery = `
+    SELECT COUNT(*) FROM "Course"
+    WHERE ($1 = '' OR title ILIKE '%' || $1 || '%'
+      OR provider ILIKE '%' || $1 || '%'
+      OR category ILIKE '%' || $1 || '%')
+  `;
+
+  const [result, countResult] = await Promise.all([
+    pool.query(query, [limit, offset, search]),
+    pool.query(countQuery, [search]),
+  ]);
+
+  const total = parseInt(countResult.rows[0].count);
+
+  return res.status(200).json({
+    success: true,
+    type: "courses",
+    page: parseInt(page),
+    limit: parseInt(limit),
+    total,
+    totalPages: Math.ceil(total / limit),
+    data: result.rows,
+  });
+}
+
+// ───────── HACKATHONS ─────────
+if (type === "hackathons") {
+
+  const query = `
+    SELECT
+      h.hackathon_id,
+      h.title,
+      h.organizer,
+      h.location,
+      h.start_date,
+      h.end_date,
+      h.created_at,
+      CASE
+        WHEN h.status = 1 THEN 'active'
+        ELSE 'inactive'
+      END AS status
+    FROM "Hackathon" h
+    WHERE ($3 = '' OR h.title ILIKE '%' || $3 || '%'
+      OR h.organizer ILIKE '%' || $3 || '%'
+      OR h.location ILIKE '%' || $3 || '%')
+    ORDER BY h.created_at DESC
+    LIMIT $1 OFFSET $2
+  `;
+
+  const countQuery = `
+    SELECT COUNT(*) FROM "Hackathon"
+    WHERE ($1 = '' OR title ILIKE '%' || $1 || '%'
+      OR organizer ILIKE '%' || $1 || '%'
+      OR location ILIKE '%' || $1 || '%')
+  `;
+
+  const [result, countResult] = await Promise.all([
+    pool.query(query, [limit, offset, search]),
+    pool.query(countQuery, [search]),
+  ]);
+
+  const total = parseInt(countResult.rows[0].count);
+
+  return res.status(200).json({
+    success: true,
+    type: "hackathons",
+    page: parseInt(page),
+    limit: parseInt(limit),
+    total,
+    totalPages: Math.ceil(total / limit),
+    data: result.rows,
+  });
+}
+
       return res.status(400).json({
         success: false,
         message: "Invalid type",
