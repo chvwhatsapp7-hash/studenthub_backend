@@ -150,7 +150,7 @@ export default async function handler(req, res) {
       const allowedFields = [
         "full_name", "email", "phone", "university", "degree",
         "graduation_year", "resume_url", "linkedin_url", "github_url",
-        "about_me", "address", "age",
+        "about_me", "address", "age","role_id"
       ];
 
       const updates = Object.entries(fields).filter(
