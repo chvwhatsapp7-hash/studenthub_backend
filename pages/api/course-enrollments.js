@@ -1,28 +1,30 @@
 import pool from "../../lib/db";
-import{cors} from "../../lib/cors";
+import { cors } from "../../lib/cors";
 import { authenticate } from "../../lib/auth";
-
+import { sendNotification } from "../../lib/sendNotification"; // 👈 single-user push
 
 export default async function handler(req, res) {
-  const user = authenticate(req, res);
-  if (!user) return res.status(401).json({ success: false, message: "Unauthorized" });
-  
+
+  // ✅ CORS FIRST
   if (cors(req, res)) return;
+
+  // ✅ AUTH
+  const user = authenticate(req, res);
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      message: "Unauthorized"
+    });
+  }
+
+  const user_id = user.user_id; // 🔥 ALWAYS take from token
 
   try {
 
-    // =========================
-    // ✅ GET → Get Courses by user_id
-    // =========================
+    // =========================================================
+    // GET — Get enrolled courses (SELF ONLY)
+    // =========================================================
     if (req.method === "GET") {
-
-      const { user_id } = req.query;
-
-      if (!user_id) {
-        return res.status(400).json({
-          message: "user_id is required"
-        });
-      }
 
       const query = `
         SELECT 
@@ -42,33 +44,35 @@ export default async function handler(req, res) {
       });
     }
 
-    // =========================
-    // ✅ POST → Enroll
-    // =========================
+    // =========================================================
+    // POST — Enroll + Notification
+    // =========================================================
     if (req.method === "POST") {
 
-      const { user_id, course_id } = req.body;
+      const { course_id } = req.body;
 
-      if (!user_id || !course_id) {
+      if (!course_id) {
         return res.status(400).json({
-          message: "user_id and course_id are required"
+          success: false,
+          message: "course_id is required"
         });
       }
 
-      // Check already enrolled
+      // 🔍 Check already enrolled
       const check = await pool.query(
-        `SELECT * FROM "CourseEnrollment"
+        `SELECT 1 FROM "CourseEnrollment"
          WHERE user_id = $1 AND course_id = $2`,
         [user_id, course_id]
       );
 
       if (check.rows.length > 0) {
         return res.status(409).json({
+          success: false,
           message: "Already enrolled"
         });
       }
 
-      // Insert
+      // 🔹 Insert enrollment
       const insertQuery = `
         INSERT INTO "CourseEnrollment"
         (user_id, course_id, enrollment_date)
@@ -81,6 +85,49 @@ export default async function handler(req, res) {
         course_id
       ]);
 
+      // 🔍 Get course title (for notification message)
+      const courseRes = await pool.query(
+        `SELECT title FROM "Course" WHERE course_id = $1`,
+        [course_id]
+      );
+
+      const courseTitle = courseRes.rows[0]?.title || "Course";
+
+      // =====================================================
+      // 🔔 STORE NOTIFICATION (SINGLE USER)
+      // =====================================================
+      try {
+        await pool.query(
+          `
+          INSERT INTO "Notification"
+          (user_id, title, message, type, entity_id, redirect_url, is_read, created_at)
+          VALUES ($1, $2, $3, 'course', $4, $5, false, NOW())
+          `,
+          [
+            user_id,
+            "Enrollment Successful",
+            `You enrolled in ${courseTitle}`,
+            course_id,
+            `/courses/${course_id}`
+          ]
+        );
+      } catch (err) {
+        console.error("❌ Notification insert failed:", err.message);
+      }
+
+      // =====================================================
+      // 🔥 PUSH NOTIFICATION (SAFE)
+      // =====================================================
+      try {
+        await sendNotification(
+          user_id,
+          "Enrollment Successful",
+          `You enrolled in ${courseTitle}`
+        );
+      } catch (err) {
+        console.error("❌ Push failed:", err.message);
+      }
+
       return res.status(201).json({
         success: true,
         message: "Enrolled successfully",
@@ -88,16 +135,17 @@ export default async function handler(req, res) {
       });
     }
 
-    // =========================
-    // ✅ DELETE → Unenroll
-    // =========================
+    // =========================================================
+    // DELETE — Unenroll
+    // =========================================================
     if (req.method === "DELETE") {
 
-      const { user_id, course_id } = req.body;
+      const { course_id } = req.body;
 
-      if (!user_id || !course_id) {
+      if (!course_id) {
         return res.status(400).json({
-          message: "user_id and course_id required"
+          success: false,
+          message: "course_id required"
         });
       }
 
@@ -110,6 +158,7 @@ export default async function handler(req, res) {
 
       if (result.rows.length === 0) {
         return res.status(404).json({
+          success: false,
           message: "Enrollment not found"
         });
       }
@@ -120,18 +169,16 @@ export default async function handler(req, res) {
       });
     }
 
-    // =========================
-    // ❌ Invalid Method
-    // =========================
     return res.status(405).json({
+      success: false,
       message: "Method not allowed"
     });
 
   } catch (err) {
-
-    console.error(err);
+    console.error("COURSE ENROLLMENT ERROR:", err);
 
     return res.status(500).json({
+      success: false,
       message: err.message
     });
   }
