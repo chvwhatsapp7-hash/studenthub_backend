@@ -1,7 +1,9 @@
 import pool from "../../lib/db";
 import { cors } from "../../lib/cors";
 import { authenticate } from "../../lib/auth";
-import { sendNotification } from "../../lib/sendNotification"; // 👈 single-user push
+
+// ❗ IMPORTANT: KEEP THIS COMMENTED unless file exists
+// import { sendNotification } from "../../lib/sendNotifications";
 
 export default async function handler(req, res) {
 
@@ -17,16 +19,17 @@ export default async function handler(req, res) {
     });
   }
 
-  const user_id = user.user_id; // 🔥 ALWAYS take from token
+  const user_id = user.user_id;
 
   try {
 
     // =========================================================
-    // GET — Get enrolled courses (SELF ONLY)
+    // GET — Get enrolled courses
     // =========================================================
     if (req.method === "GET") {
 
-      const query = `
+      const result = await pool.query(
+        `
         SELECT 
           c.course_id,
           c.title
@@ -34,9 +37,9 @@ export default async function handler(req, res) {
         JOIN "Course" c 
           ON ce.course_id = c.course_id
         WHERE ce.user_id = $1
-      `;
-
-      const result = await pool.query(query, [user_id]);
+        `,
+        [user_id]
+      );
 
       return res.status(200).json({
         success: true,
@@ -58,7 +61,7 @@ export default async function handler(req, res) {
         });
       }
 
-      // 🔍 Check already enrolled
+      // 🔍 Check duplicate
       const check = await pool.query(
         `SELECT 1 FROM "CourseEnrollment"
          WHERE user_id = $1 AND course_id = $2`,
@@ -73,19 +76,19 @@ export default async function handler(req, res) {
       }
 
       // 🔹 Insert enrollment
-      const insertQuery = `
+      const insert = await pool.query(
+        `
         INSERT INTO "CourseEnrollment"
         (user_id, course_id, enrollment_date)
         VALUES ($1,$2,NOW())
         RETURNING *
-      `;
+        `,
+        [user_id, course_id]
+      );
 
-      const result = await pool.query(insertQuery, [
-        user_id,
-        course_id
-      ]);
+      const enrollment = insert.rows[0];
 
-      // 🔍 Get course title (for notification message)
+      // 🔍 Get course title
       const courseRes = await pool.query(
         `SELECT title FROM "Course" WHERE course_id = $1`,
         [course_id]
@@ -93,9 +96,9 @@ export default async function handler(req, res) {
 
       const courseTitle = courseRes.rows[0]?.title || "Course";
 
-      // =====================================================
+      // ======================================================
       // 🔔 STORE NOTIFICATION (SINGLE USER)
-      // =====================================================
+      // ======================================================
       try {
         await pool.query(
           `
@@ -115,15 +118,16 @@ export default async function handler(req, res) {
         console.error("❌ Notification insert failed:", err.message);
       }
 
-      // =====================================================
-      // 🔥 PUSH NOTIFICATION (SAFE)
-      // =====================================================
+      // ======================================================
+      // 🔥 PUSH NOTIFICATION (SAFE — OPTIONAL)
+      // ======================================================
       try {
-        await sendNotification(
-          user_id,
-          "Enrollment Successful",
-          `You enrolled in ${courseTitle}`
-        );
+        // ❗ Only enable if file exists
+        // await sendNotification(
+        //   user_id,
+        //   "Enrollment Successful",
+        //   `You enrolled in ${courseTitle}`
+        // );
       } catch (err) {
         console.error("❌ Push failed:", err.message);
       }
@@ -131,7 +135,7 @@ export default async function handler(req, res) {
       return res.status(201).json({
         success: true,
         message: "Enrolled successfully",
-        data: result.rows[0]
+        data: enrollment
       });
     }
 
@@ -150,9 +154,11 @@ export default async function handler(req, res) {
       }
 
       const result = await pool.query(
-        `DELETE FROM "CourseEnrollment"
-         WHERE user_id = $1 AND course_id = $2
-         RETURNING *`,
+        `
+        DELETE FROM "CourseEnrollment"
+        WHERE user_id = $1 AND course_id = $2
+        RETURNING *
+        `,
         [user_id, course_id]
       );
 
