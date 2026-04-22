@@ -1,6 +1,6 @@
 import pool from "../../lib/db";
-import { cors } from "../../lib/cors";
-import { authenticate } from "../../lib/auth";
+import { cors } from "../../../lib/cors";
+import { authenticate } from "../../../lib/auth";
 
 export default async function handler(req, res) {
 
