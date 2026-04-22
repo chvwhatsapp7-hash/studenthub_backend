@@ -123,20 +123,29 @@ model User {
   full_name               String   @db.VarChar(255)
   email                   String   @unique @db.VarChar(255)
 
-  password_hash           String?  // ✅ changed
-
-  auth_provider           String   @default("LOCAL") // ✅ added
-  firebase_uid            String?  @unique           // ✅ optional but recommended
+  password_hash           String?
+  auth_provider           String   @default("LOCAL")
+  firebase_uid            String?  @unique
 
   phone                   String?  @db.VarChar(20)
+
+  // 🎓 College fields
   university              String?  @db.VarChar(255)
   degree                  String?  @db.VarChar(255)
   graduation_year         Int?
+
+  // 🏫 School support (NEW)
+  class                   Int?
+  school_name             String?  @db.VarChar(255)
+
+  // 🎯 Optional user intent (NEW)
+  goal                    String?  @db.VarChar(255)
+
   resume_url              String?
   linkedin_url            String?
   github_url              String?
 
-  role_id                 Int      @default(4) // ✅ optional improvement
+  role_id                 Int      @default(4)
 
   created_at              DateTime @default(now())
   updated_at              DateTime @updatedAt
@@ -155,16 +164,28 @@ model User {
   userSkills              UserSkill[]
   projects                Project[]
   certificates            Certificate[]
-  devices UserDevice[]
-  notifications Notification[]
+
+  devices                 UserDevice[]
+  notifications           Notification[]
+
+  // ⭐ NEW RELATIONS
+  interests               UserInterest[]
+  achievements            UserAchievement[]
 }
 
 model CourseEnrollment {
   id                Int      @id @default(autoincrement())
   user_id           BigInt
   course_id         Int
+
   completion_status String?  @db.VarChar(50)
+
+  // ⭐ NEW (REAL VALUE)
+  progress          Int      @default(0)   // 0 → 100
+  completed         Boolean  @default(false)
+
   enrollment_date   DateTime @default(now())
+
   course            Course   @relation(fields: [course_id], references: [course_id])
   user              User     @relation(fields: [user_id], references: [user_id])
 }
@@ -359,3 +380,48 @@ model Notification {
 
   created_at      DateTime  @default(now())
 }
+
+model Interest {
+  interest_id Int    @id @default(autoincrement())
+  name        String @unique
+
+  userInterests UserInterest[]
+}
+
+model UserInterest {
+  id           Int @id @default(autoincrement())
+
+  user_id      BigInt
+  interest_id  Int
+
+  user         User     @relation(fields: [user_id], references: [user_id])
+  interest     Interest @relation(fields: [interest_id], references: [interest_id])
+
+  @@unique([user_id, interest_id])
+}
+
+model Achievement {
+  achievement_id Int    @id @default(autoincrement())
+
+  title          String @db.VarChar(255)
+  description    String?
+
+  icon           String? // optional UI icon
+
+  userAchievements UserAchievement[]
+}
+
+model UserAchievement {
+  id              Int @id @default(autoincrement())
+
+  user_id         BigInt
+  achievement_id  Int
+
+  achieved_at     DateTime @default(now())
+
+  user            User        @relation(fields: [user_id], references: [user_id])
+  achievement     Achievement @relation(fields: [achievement_id], references: [achievement_id])
+
+  @@unique([user_id, achievement_id])
+}
+

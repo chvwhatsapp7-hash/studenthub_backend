@@ -2,9 +2,6 @@ import pool from "../../lib/db";
 import { cors } from "../../lib/cors";
 import { authenticate } from "../../lib/auth";
 
-// ❗ IMPORTANT: KEEP THIS COMMENTED unless file exists
-// import { sendNotification } from "../../lib/sendNotifications";
-
 export default async function handler(req, res) {
 
   // ✅ CORS FIRST
@@ -24,7 +21,7 @@ export default async function handler(req, res) {
   try {
 
     // =========================================================
-    // GET — Get enrolled courses
+    // GET — Get enrolled courses WITH progress
     // =========================================================
     if (req.method === "GET") {
 
@@ -32,11 +29,14 @@ export default async function handler(req, res) {
         `
         SELECT 
           c.course_id,
-          c.title
+          c.title,
+          ce.progress,
+          ce.completed
         FROM "CourseEnrollment" ce
         JOIN "Course" c 
           ON ce.course_id = c.course_id
         WHERE ce.user_id = $1
+        ORDER BY ce.enrollment_date DESC
         `,
         [user_id]
       );
@@ -48,7 +48,7 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // POST — Enroll + Notification
+    // POST — Enroll + initialize progress
     // =========================================================
     if (req.method === "POST") {
 
@@ -61,7 +61,7 @@ export default async function handler(req, res) {
         });
       }
 
-      // 🔍 Check duplicate
+      // 🔍 Duplicate check
       const check = await pool.query(
         `SELECT 1 FROM "CourseEnrollment"
          WHERE user_id = $1 AND course_id = $2`,
@@ -75,12 +75,12 @@ export default async function handler(req, res) {
         });
       }
 
-      // 🔹 Insert enrollment
+      // 🔹 Insert enrollment (WITH progress)
       const insert = await pool.query(
         `
         INSERT INTO "CourseEnrollment"
-        (user_id, course_id, enrollment_date)
-        VALUES ($1,$2,NOW())
+        (user_id, course_id, progress, completed, enrollment_date)
+        VALUES ($1,$2,0,false,NOW())
         RETURNING *
         `,
         [user_id, course_id]
@@ -97,7 +97,7 @@ export default async function handler(req, res) {
       const courseTitle = courseRes.rows[0]?.title || "Course";
 
       // ======================================================
-      // 🔔 STORE NOTIFICATION (SINGLE USER)
+      // 🔔 STORE NOTIFICATION
       // ======================================================
       try {
         await pool.query(
@@ -118,24 +118,58 @@ export default async function handler(req, res) {
         console.error("❌ Notification insert failed:", err.message);
       }
 
-      // ======================================================
-      // 🔥 PUSH NOTIFICATION (SAFE — OPTIONAL)
-      // ======================================================
-      try {
-        // ❗ Only enable if file exists
-        // await sendNotification(
-        //   user_id,
-        //   "Enrollment Successful",
-        //   `You enrolled in ${courseTitle}`
-        // );
-      } catch (err) {
-        console.error("❌ Push failed:", err.message);
-      }
-
       return res.status(201).json({
         success: true,
         message: "Enrolled successfully",
         data: enrollment
+      });
+    }
+
+    // =========================================================
+    // PUT — Update progress
+    // =========================================================
+    if (req.method === "PUT") {
+
+      const { course_id, progress } = req.body;
+
+      if (!course_id || progress === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: "course_id and progress required"
+        });
+      }
+
+      if (progress < 0 || progress > 100) {
+        return res.status(400).json({
+          success: false,
+          message: "progress must be between 0 and 100"
+        });
+      }
+
+      const completed = progress === 100;
+
+      const result = await pool.query(
+        `
+        UPDATE "CourseEnrollment"
+        SET progress = $1,
+            completed = $2
+        WHERE user_id = $3 AND course_id = $4
+        RETURNING *
+        `,
+        [progress, completed, user_id, course_id]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Enrollment not found"
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Progress updated",
+        data: result.rows[0]
       });
     }
 

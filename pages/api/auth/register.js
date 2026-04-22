@@ -1,33 +1,48 @@
 import bcrypt from "bcrypt";
 import pool from "../../../lib/db";
-import{cors} from "../../../lib/cors";
+import { cors } from "../../../lib/cors";
 
 export default async function handler(req, res) {
-    if (cors(req, res)) return;
+  if (cors(req, res)) return;
 
   try {
 
-    // ─────────────────────────────────────────
-    // POST — Register a new user (with optional skills)
-    // ─────────────────────────────────────────
+    // =========================================================
+    // POST — REGISTER USER (WITH SKILLS + INTERESTS)
+    // =========================================================
     if (req.method === "POST") {
+
       const {
         full_name,
         email,
         password,
+
         phone = null,
+
+        // 🎓 College
         university = null,
         degree = null,
         graduation_year = null,
+
+        // 🏫 School
+        class: userClass = null,
+        school_name = null,
+
+        // 🎯 Common
+        goal = null,
+
         resume_url = null,
         linkedin_url = null,
         github_url = null,
+
         age,
         role_id,
-        skills = []  // array of { skill_id: number, proficiency: number }
+
+        skills = [],         // [{skill_id, proficiency}]
+        interest_ids = []    // [1,2,3]
       } = req.body;
 
-      // Required field check
+      // ================= VALIDATION =================
       if (!full_name || !email || !password || age === undefined) {
         return res.status(400).json({
           success: false,
@@ -35,7 +50,7 @@ export default async function handler(req, res) {
         });
       }
 
-      // Validate skills shape if provided
+      // Skills validation
       if (skills.length > 0) {
         const isValid = skills.every(
           (s) =>
@@ -47,16 +62,17 @@ export default async function handler(req, res) {
         if (!isValid) {
           return res.status(400).json({
             success: false,
-            message: "Each skill must have a numeric skill_id and proficiency (1–5)"
+            message: "Invalid skills format"
           });
         }
       }
 
-      // Check if email already exists
+      // ================= EMAIL CHECK =================
       const emailCheck = await pool.query(
         `SELECT user_id FROM "User" WHERE email = $1`,
         [email]
       );
+
       if (emailCheck.rows.length > 0) {
         return res.status(400).json({
           success: false,
@@ -64,11 +80,12 @@ export default async function handler(req, res) {
         });
       }
 
-      // Validate role_id
+      // ================= ROLE CHECK =================
       const roleCheck = await pool.query(
         `SELECT role_id FROM "Role" WHERE role_id = $1`,
         [role_id]
       );
+
       if (roleCheck.rows.length === 0) {
         return res.status(400).json({
           success: false,
@@ -78,18 +95,29 @@ export default async function handler(req, res) {
 
       const hashedPassword = await bcrypt.hash(password, 10);
 
-      // Use a transaction so user + skills are inserted atomically
       const client = await pool.connect();
+
       try {
         await client.query("BEGIN");
 
-        // 1. Insert user
+        // ================= INSERT USER =================
         const userResult = await client.query(
-          `INSERT INTO "User"
-            (full_name, email, password_hash, phone, university, degree,
-             graduation_year, resume_url, linkedin_url, github_url, age, role_id, created_at, updated_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),NOW())
-           RETURNING user_id, full_name, email, role_id`,
+          `
+          INSERT INTO "User"
+          (
+            full_name, email, password_hash,
+            phone,
+            university, degree, graduation_year,
+            class, school_name,
+            goal,
+            resume_url, linkedin_url, github_url,
+            age, role_id,
+            created_at, updated_at
+          )
+          VALUES
+          ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW(),NOW())
+          RETURNING user_id, full_name, email, role_id
+          `,
           [
             full_name,
             email,
@@ -98,6 +126,9 @@ export default async function handler(req, res) {
             university,
             degree,
             graduation_year,
+            userClass,
+            school_name,
+            goal,
             resume_url,
             linkedin_url,
             github_url,
@@ -108,20 +139,8 @@ export default async function handler(req, res) {
 
         const newUser = userResult.rows[0];
 
-        // 2. Insert skills if provided
+        // ================= INSERT SKILLS =================
         if (skills.length > 0) {
-          // Verify all provided skill_ids exist in Skill table
-          const skillIds = skills.map((s) => s.skill_id);
-          const skillCheck = await client.query(
-            `SELECT skill_id FROM "Skill" WHERE skill_id = ANY($1::int[])`,
-            [skillIds]
-          );
-
-          if (skillCheck.rows.length !== skillIds.length) {
-            throw new Error("One or more skill_ids are invalid");
-          }
-
-          // Build bulk parameterized insert
           const values = [];
           const placeholders = skills.map((s, i) => {
             const base = i * 3;
@@ -130,11 +149,28 @@ export default async function handler(req, res) {
           });
 
           await client.query(
-            `INSERT INTO "UserSkill" (user_id, skill_id, proficiency)
-             VALUES ${placeholders.join(", ")}
-             ON CONFLICT (user_id, skill_id) DO UPDATE SET proficiency = EXCLUDED.proficiency`,
+            `
+            INSERT INTO "UserSkill" (user_id, skill_id, proficiency)
+            VALUES ${placeholders.join(", ")}
+            ON CONFLICT (user_id, skill_id)
+            DO UPDATE SET proficiency = EXCLUDED.proficiency
+            `,
             values
           );
+        }
+
+        // ================= INSERT INTERESTS =================
+        if (interest_ids.length > 0) {
+          for (const interest_id of interest_ids) {
+            await client.query(
+              `
+              INSERT INTO "UserInterest"(user_id, interest_id)
+              VALUES ($1, $2)
+              ON CONFLICT DO NOTHING
+              `,
+              [newUser.user_id, interest_id]
+            );
+          }
         }
 
         await client.query("COMMIT");
@@ -144,7 +180,8 @@ export default async function handler(req, res) {
           message: "User created successfully",
           data: {
             ...newUser,
-            skills_added: skills.length
+            skills_added: skills.length,
+            interests_added: interest_ids.length
           }
         });
 
@@ -156,10 +193,11 @@ export default async function handler(req, res) {
       }
     }
 
-    // ─────────────────────────────────────────
-    // GET — Fetch all users or single user by user_id
-    // ─────────────────────────────────────────
+    // =========================================================
+    // GET — FETCH USER(S)
+    // =========================================================
     if (req.method === "GET") {
+
       const { user_id } = req.query;
 
       if (user_id) {
@@ -174,25 +212,51 @@ export default async function handler(req, res) {
       return res.status(200).json(result.rows);
     }
 
-    // ─────────────────────────────────────────
-    // PUT — Update user fields
-    // ─────────────────────────────────────────
+    // =========================================================
+    // PUT — UPDATE USER
+    // =========================================================
     if (req.method === "PUT") {
-      const { user_id, full_name, phone, university } = req.body;
+
+      const {
+        user_id,
+        full_name,
+        phone,
+        university,
+        class: userClass,
+        school_name,
+        goal,
+        about_me
+      } = req.body;
 
       if (!user_id) {
         return res.status(400).json({ message: "user_id required" });
       }
 
       const result = await pool.query(
-        `UPDATE "User"
-         SET full_name = COALESCE($1, full_name),
-             phone = COALESCE($2, phone),
-             university = COALESCE($3, university),
-             updated_at = NOW()
-         WHERE user_id = $4
-         RETURNING *`,
-        [full_name, phone, university, user_id]
+        `
+        UPDATE "User"
+        SET
+          full_name = COALESCE($1, full_name),
+          phone = COALESCE($2, phone),
+          university = COALESCE($3, university),
+          class = COALESCE($4, class),
+          school_name = COALESCE($5, school_name),
+          goal = COALESCE($6, goal),
+          about_me = COALESCE($7, about_me),
+          updated_at = NOW()
+        WHERE user_id = $8
+        RETURNING *
+        `,
+        [
+          full_name,
+          phone,
+          university,
+          userClass,
+          school_name,
+          goal,
+          about_me,
+          user_id
+        ]
       );
 
       return res.status(200).json({
@@ -201,10 +265,11 @@ export default async function handler(req, res) {
       });
     }
 
-    // ─────────────────────────────────────────
-    // DELETE — Remove a user
-    // ─────────────────────────────────────────
+    // =========================================================
+    // DELETE — REMOVE USER
+    // =========================================================
     if (req.method === "DELETE") {
+
       const { user_id } = req.body;
 
       if (!user_id) {
@@ -225,7 +290,8 @@ export default async function handler(req, res) {
     return res.status(405).json({ message: "Method not allowed" });
 
   } catch (err) {
-    console.error(err);
+    console.error("USER API ERROR:", err);
+
     return res.status(500).json({
       success: false,
       message: err.message
