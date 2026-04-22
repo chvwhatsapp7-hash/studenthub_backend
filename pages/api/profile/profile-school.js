@@ -1,4 +1,4 @@
-import pool from "../../lib/db";
+import pool from "../../../lib/db";
 import { cors } from "../../../lib/cors";
 import { authenticate } from "../../../lib/auth";
 
