@@ -1,14 +1,13 @@
 import pool from "../../lib/db";
 import { cors } from "../../lib/cors";
 import { authenticate } from "../../lib/auth";
-import { sendNotification } from "../../lib/sendNotifications"; // optional
 
 export default async function handler(req, res) {
 
   // ✅ CORS
   if (cors(req, res)) return;
 
-  // ✅ AUTH
+  // ✅ AUTH (you can later restrict to admin)
   const user = authenticate(req, res);
   if (!user) {
     return res.status(401).json({
@@ -17,30 +16,23 @@ export default async function handler(req, res) {
     });
   }
 
-  const user_id = user.user_id;
-
   try {
 
     // =========================================================
-    // GET — Fetch user achievements
+    // GET — Fetch all achievements
     // =========================================================
     if (req.method === "GET") {
 
       const result = await pool.query(
         `
-        SELECT
-          a.achievement_id,
-          a.title,
-          a.description,
-          a.icon,
-          ua.achieved_at
-        FROM "UserAchievement" ua
-        JOIN "Achievement" a 
-          ON ua.achievement_id = a.achievement_id
-        WHERE ua.user_id = $1
-        ORDER BY ua.achieved_at DESC
-        `,
-        [user_id]
+        SELECT 
+          achievement_id,
+          title,
+          description,
+          icon
+        FROM "Achievement"
+        ORDER BY achievement_id DESC
+        `
       );
 
       return res.status(200).json({
@@ -50,9 +42,81 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // POST — Add achievement + Notification
+    // POST — Create achievement
     // =========================================================
     if (req.method === "POST") {
+
+      const { title, description, icon } = req.body;
+
+      if (!title || !description) {
+        return res.status(400).json({
+          success: false,
+          message: "title and description are required"
+        });
+      }
+
+      const result = await pool.query(
+        `
+        INSERT INTO "Achievement"
+        (title, description, icon)
+        VALUES ($1, $2, $3)
+        RETURNING *
+        `,
+        [title, description, icon || null]
+      );
+
+      return res.status(201).json({
+        success: true,
+        message: "Achievement created successfully",
+        data: result.rows[0]
+      });
+    }
+
+    // =========================================================
+    // PUT — Update achievement
+    // =========================================================
+    if (req.method === "PUT") {
+
+      const { achievement_id, title, description, icon } = req.body;
+
+      if (!achievement_id) {
+        return res.status(400).json({
+          success: false,
+          message: "achievement_id is required"
+        });
+      }
+
+      const result = await pool.query(
+        `
+        UPDATE "Achievement"
+        SET 
+          title = COALESCE($1, title),
+          description = COALESCE($2, description),
+          icon = COALESCE($3, icon)
+        WHERE achievement_id = $4
+        RETURNING *
+        `,
+        [title, description, icon, achievement_id]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Achievement not found"
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Achievement updated",
+        data: result.rows[0]
+      });
+    }
+
+    // =========================================================
+    // DELETE — Remove achievement
+    // =========================================================
+    if (req.method === "DELETE") {
 
       const { achievement_id } = req.body;
 
@@ -63,91 +127,27 @@ export default async function handler(req, res) {
         });
       }
 
-      // 🔍 Check valid achievement
-      const checkAchievement = await pool.query(
-        `SELECT title FROM "Achievement" WHERE achievement_id = $1`,
+      const result = await pool.query(
+        `
+        DELETE FROM "Achievement"
+        WHERE achievement_id = $1
+        RETURNING *
+        `,
         [achievement_id]
       );
 
-      if (checkAchievement.rows.length === 0) {
-        return res.status(400).json({
+      if (result.rows.length === 0) {
+        return res.status(404).json({
           success: false,
-          message: "Invalid achievement_id"
+          message: "Achievement not found"
         });
       }
 
-      const achievementTitle = checkAchievement.rows[0].title;
-
-      // 🔍 Check duplicate
-      const checkUser = await pool.query(
-        `
-        SELECT 1 FROM "UserAchievement"
-        WHERE user_id = $1 AND achievement_id = $2
-        `,
-        [user_id, achievement_id]
-      );
-
-      if (checkUser.rows.length > 0) {
-        return res.status(409).json({
-          success: false,
-          message: "Achievement already earned"
-        });
-      }
-
-      const client = await pool.connect();
-
-      try {
-        await client.query("BEGIN");
-
-        // 🔹 Insert achievement
-        const result = await client.query(
-          `
-          INSERT INTO "UserAchievement"
-          (user_id, achievement_id, achieved_at)
-          VALUES ($1, $2, NOW())
-          RETURNING *
-          `,
-          [user_id, achievement_id]
-        );
-
-        // ======================================================
-        // 🔔 STORE NOTIFICATION
-        // ======================================================
-        const title = "Achievement Unlocked 🎉";
-        const message = `You earned: ${achievementTitle}`;
-
-        await client.query(
-          `
-          INSERT INTO "Notification"
-          (user_id, title, message, type, entity_id, is_read, created_at)
-          VALUES ($1, $2, $3, 'achievement', $4, false, NOW())
-          `,
-          [user_id, title, message, achievement_id]
-        );
-
-        await client.query("COMMIT");
-        client.release();
-
-        // ======================================================
-        // 🔥 PUSH NOTIFICATION (SAFE)
-        // ======================================================
-        try {
-          await sendNotification(user_id, title, message);
-        } catch (err) {
-          console.error("❌ Push failed:", err.message);
-        }
-
-        return res.status(201).json({
-          success: true,
-          message: "Achievement added successfully",
-          data: result.rows[0]
-        });
-
-      } catch (err) {
-        await client.query("ROLLBACK");
-        client.release();
-        throw err;
-      }
+      return res.status(200).json({
+        success: true,
+        message: "Achievement deleted",
+        data: result.rows[0]
+      });
     }
 
     return res.status(405).json({
@@ -156,7 +156,7 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
-    console.error("ACHIEVEMENT API ERROR:", err);
+    console.error("ACHIEVEMENTS API ERROR:", err);
 
     return res.status(500).json({
       success: false,

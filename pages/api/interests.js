@@ -1,40 +1,56 @@
 import pool from "../../lib/db";
 import { cors } from "../../lib/cors";
 import { authenticate } from "../../lib/auth";
-import { sendNotification } from "../../lib/sendNotifications"; // optional
 
 export default async function handler(req, res) {
 
-  // ✅ CORS
   if (cors(req, res)) return;
-
-  // ✅ AUTH
-  const user = authenticate(req, res);
-  if (!user) {
-    return res.status(401).json({
-      success: false,
-      message: "Unauthorized"
-    });
-  }
-
-  const user_id = user.user_id;
 
   try {
 
     // =========================================================
-    // GET — Fetch user interests
+    // GET — All interests (+ optional selected flag)
     // =========================================================
     if (req.method === "GET") {
 
-      const result = await pool.query(
-        `
-        SELECT i.interest_id, i.name
-        FROM "UserInterest" ui
-        JOIN "Interest" i ON ui.interest_id = i.interest_id
-        WHERE ui.user_id = $1
-        `,
-        [user_id]
-      );
+      let user = null;
+      let user_id = null;
+
+      // 🔹 Try to authenticate (optional)
+      try {
+        user = authenticate(req, res);
+        user_id = user?.user_id;
+      } catch {
+        // ignore auth errors for public access
+      }
+
+      let result;
+
+      if (user_id) {
+        // ✅ Return with selected flag
+        result = await pool.query(
+          `
+          SELECT 
+            i.interest_id,
+            i.name,
+            CASE 
+              WHEN ui.user_id IS NOT NULL THEN true
+              ELSE false
+            END AS selected
+          FROM "Interest" i
+          LEFT JOIN "UserInterest" ui
+            ON i.interest_id = ui.interest_id
+            AND ui.user_id = $1
+          ORDER BY i.name
+          `,
+          [user_id]
+        );
+      } else {
+        // ✅ Public (no selected flag)
+        result = await pool.query(
+          `SELECT interest_id, name FROM "Interest" ORDER BY name`
+        );
+      }
 
       return res.status(200).json({
         success: true,
@@ -43,93 +59,34 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // POST — Set / Update interests + Notification
+    // POST — Add new interest (ADMIN USE)
     // =========================================================
     if (req.method === "POST") {
 
-      const { interest_ids } = req.body;
+      const { name } = req.body;
 
-      if (!Array.isArray(interest_ids)) {
+      if (!name) {
         return res.status(400).json({
           success: false,
-          message: "interest_ids must be an array"
+          message: "name is required"
         });
       }
 
-      // 🔍 Validate interest_ids
-      if (interest_ids.length > 0) {
-        const check = await pool.query(
-          `SELECT interest_id FROM "Interest" WHERE interest_id = ANY($1::int[])`,
-          [interest_ids]
-        );
+      const result = await pool.query(
+        `
+        INSERT INTO "Interest" (name)
+        VALUES ($1)
+        ON CONFLICT (name) DO NOTHING
+        RETURNING *
+        `,
+        [name]
+      );
 
-        if (check.rows.length !== interest_ids.length) {
-          return res.status(400).json({
-            success: false,
-            message: "Invalid interest_ids"
-          });
-        }
-      }
-
-      const client = await pool.connect();
-
-      try {
-        await client.query("BEGIN");
-
-        // 🔹 Remove old interests
-        await client.query(
-          `DELETE FROM "UserInterest" WHERE user_id = $1`,
-          [user_id]
-        );
-
-        // 🔹 Insert new interests
-        for (const interest_id of interest_ids) {
-          await client.query(
-            `
-            INSERT INTO "UserInterest"(user_id, interest_id)
-            VALUES ($1, $2)
-            `,
-            [user_id, interest_id]
-          );
-        }
-
-        // ======================================================
-        // 🔔 STORE NOTIFICATION
-        // ======================================================
-        const title = "Interests Updated";
-        const message = "Your interests have been updated successfully";
-
-        await client.query(
-          `
-          INSERT INTO "Notification"
-          (user_id, title, message, type, is_read, created_at)
-          VALUES ($1, $2, $3, 'interest', false, NOW())
-          `,
-          [user_id, title, message]
-        );
-
-        await client.query("COMMIT");
-        client.release();
-
-        // ======================================================
-        // 🔥 PUSH NOTIFICATION (SAFE)
-        // ======================================================
-        try {
-          await sendNotification(user_id, title, message);
-        } catch (err) {
-          console.error("❌ Push failed:", err.message);
-        }
-
-        return res.status(200).json({
-          success: true,
-          message: "Interests updated successfully"
-        });
-
-      } catch (err) {
-        await client.query("ROLLBACK");
-        client.release();
-        throw err;
-      }
+      return res.status(201).json({
+        success: true,
+        message: "Interest created",
+        data: result.rows[0] || null
+      });
     }
 
     return res.status(405).json({
@@ -138,7 +95,7 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
-    console.error("INTEREST API ERROR:", err);
+    console.error("INTEREST MASTER ERROR:", err);
 
     return res.status(500).json({
       success: false,

@@ -96,6 +96,7 @@ model Course {
 
   enrollments CourseEnrollment[]
   courseSkills CourseSkill[]
+  courseInterests CourseInterest[]
 }
 
 model Hackathon {
@@ -386,6 +387,7 @@ model Interest {
   name        String @unique
 
   userInterests UserInterest[]
+  courseInterests CourseInterest[]
 }
 
 model UserInterest {
@@ -425,3 +427,14 @@ model UserAchievement {
   @@unique([user_id, achievement_id])
 }
 
+model CourseInterest {
+  id          Int      @id @default(autoincrement())
+
+  course_id   Int
+  interest_id Int
+
+  course      Course   @relation(fields: [course_id], references: [course_id], onDelete: Cascade)
+  interest    Interest @relation(fields: [interest_id], references: [interest_id], onDelete: Cascade)
+
+  @@unique([course_id, interest_id])
+}
