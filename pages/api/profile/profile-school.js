@@ -21,12 +21,12 @@ export default async function handler(req, res) {
     if (req.method === "GET") {
 
       // 🔒 Ensure school user only
-      if (user.role_id !== 2) {
-        return res.status(403).json({
-          success: false,
-          message: "Only school users allowed"
-        });
-      }
+      // if (user.role_id !== 2) {
+      //   return res.status(403).json({
+      //     success: false,
+      //     message: "Only school users allowed"
+      //   });
+      // }
 
       // 🔹 USER BASIC
       const userQuery = `
