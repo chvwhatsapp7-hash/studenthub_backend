@@ -4,10 +4,8 @@ import { authenticate } from "../../lib/auth";
 
 export default async function handler(req, res) {
 
-  // ✅ CORS
   if (cors(req, res)) return;
 
-  // ✅ AUTH
   const user = authenticate(req, res);
   if (!user) {
     return res.status(401).json({
@@ -16,7 +14,8 @@ export default async function handler(req, res) {
     });
   }
 
-  const user_id = user.user_id;
+  // ✅ manual user_id support + token fallback
+  const user_id = req.query.user_id || req.body.user_id || user.user_id;
 
   try {
 
@@ -45,7 +44,7 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // POST — Set / Update interests (replace all)
+    // POST — Set / Update interests
     // =========================================================
     if (req.method === "POST") {
 
@@ -58,7 +57,7 @@ export default async function handler(req, res) {
         });
       }
 
-      // 🔍 Validate interest_ids
+      // Validate master interests
       if (interest_ids.length > 0) {
         const check = await pool.query(
           `SELECT interest_id FROM "Interest" WHERE interest_id = ANY($1::int[])`,
@@ -78,13 +77,13 @@ export default async function handler(req, res) {
       try {
         await client.query("BEGIN");
 
-        // 🔹 Remove old interests
+        // delete old
         await client.query(
           `DELETE FROM "UserInterest" WHERE user_id = $1`,
           [user_id]
         );
 
-        // 🔹 Insert new interests
+        // insert new
         for (const interest_id of interest_ids) {
           await client.query(
             `
@@ -101,7 +100,7 @@ export default async function handler(req, res) {
 
         return res.status(200).json({
           success: true,
-          message: "Interests updated successfully"
+          message: "User interests updated successfully"
         });
 
       } catch (err) {
