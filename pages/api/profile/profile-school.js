@@ -14,19 +14,12 @@ export default async function handler(req, res) {
     });
   }
 
-  const user_id = user.user_id;
+  // ✅ manual support + token fallback
+  const user_id = req.query.user_id || req.body.user_id || user.user_id;
 
   try {
 
     if (req.method === "GET") {
-
-      // 🔒 Ensure school user only
-      // if (user.role_id !== 2) {
-      //   return res.status(403).json({
-      //     success: false,
-      //     message: "Only school users allowed"
-      //   });
-      // }
 
       // 🔹 USER BASIC
       const userQuery = `
@@ -41,7 +34,7 @@ export default async function handler(req, res) {
         WHERE user_id = $1
       `;
 
-      // 🔹 COURSES (WITH PROGRESS)
+      // 🔹 ENROLLED COURSES
       const courseQuery = `
         SELECT
           c.course_id,
@@ -53,9 +46,22 @@ export default async function handler(req, res) {
         WHERE ce.user_id = $1
       `;
 
+      // 🔹 SAVED COURSES ✅ NEW
+      const savedCourseQuery = `
+        SELECT
+          c.course_id,
+          c.title,
+          c.description,
+          sc.saved_at
+        FROM "SavedCourse" sc
+        JOIN "Course" c ON sc.course_id = c.course_id
+        WHERE sc.user_id = $1
+        ORDER BY sc.saved_at DESC
+      `;
+
       // 🔹 INTERESTS
       const interestQuery = `
-        SELECT i.name
+        SELECT i.interest_id, i.name
         FROM "UserInterest" ui
         JOIN "Interest" i ON ui.interest_id = i.interest_id
         WHERE ui.user_id = $1
@@ -64,6 +70,7 @@ export default async function handler(req, res) {
       // 🔹 ACHIEVEMENTS
       const achievementQuery = `
         SELECT
+          a.achievement_id,
           a.title,
           a.icon
         FROM "UserAchievement" ua
@@ -71,30 +78,19 @@ export default async function handler(req, res) {
         WHERE ua.user_id = $1
       `;
 
-      // 🔹 HACKATHONS (OPTIONAL)
-      const hackathonQuery = `
-        SELECT
-          h.title,
-          h.start_date,
-          h.end_date
-        FROM "HackathonParticipant" hp
-        JOIN "Hackathon" h ON hp.hackathon_id = h.hackathon_id
-        WHERE hp.user_id = $1
-      `;
-
-      // 🚀 Parallel queries
+      // 🚀 Parallel Queries
       const [
         userRes,
         courseRes,
+        savedCourseRes,
         interestRes,
-        achievementRes,
-        hackathonRes
+        achievementRes
       ] = await Promise.all([
         pool.query(userQuery, [user_id]),
         pool.query(courseQuery, [user_id]),
+        pool.query(savedCourseQuery, [user_id]),
         pool.query(interestQuery, [user_id]),
-        pool.query(achievementQuery, [user_id]),
-        pool.query(hackathonQuery, [user_id])
+        pool.query(achievementQuery, [user_id])
       ]);
 
       const userData = userRes.rows[0];
@@ -108,11 +104,13 @@ export default async function handler(req, res) {
 
       const courses = courseRes.rows;
       const achievements = achievementRes.rows;
+      const savedCourses = savedCourseRes.rows;
 
-      // 📊 Stats (important for UI cards)
+      // 🔹 STATS
       const stats = {
         coursesEnrolled: courses.length,
         coursesCompleted: courses.filter(c => c.completed).length,
+        savedCourses: savedCourses.length,
         achievements: achievements.length
       };
 
@@ -122,9 +120,9 @@ export default async function handler(req, res) {
           user: userData,
           stats,
           courses,
+          savedCourses,
           interests: interestRes.rows,
-          achievements,
-          hackathons: hackathonRes.rows
+          achievements
         }
       });
     }
