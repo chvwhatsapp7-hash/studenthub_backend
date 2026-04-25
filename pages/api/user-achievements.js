@@ -14,7 +14,8 @@ export default async function handler(req, res) {
     });
   }
 
-  const user_id = user.user_id;
+  // ✅ manual user_id support + token fallback
+  const user_id = req.query.user_id || req.body.user_id || user.user_id;
 
   try {
 
@@ -32,7 +33,7 @@ export default async function handler(req, res) {
           a.icon,
           ua.achieved_at
         FROM "UserAchievement" ua
-        JOIN "Achievement" a 
+        JOIN "Achievement" a
           ON ua.achievement_id = a.achievement_id
         WHERE ua.user_id = $1
         ORDER BY ua.achieved_at DESC
@@ -47,7 +48,7 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // POST — Evaluate & Assign Achievements (AUTO)
+    // POST — Evaluate & Assign Achievements
     // =========================================================
     if (req.method === "POST") {
 
@@ -57,9 +58,8 @@ export default async function handler(req, res) {
         await client.query("BEGIN");
 
         // ===============================
-        // 1️⃣ Count user activities
+        // Count user activities
         // ===============================
-
         const interestCountRes = await client.query(
           `SELECT COUNT(*) FROM "UserInterest" WHERE user_id = $1`,
           [user_id]
@@ -74,24 +74,17 @@ export default async function handler(req, res) {
         const courseCount = parseInt(courseCountRes.rows[0].count);
 
         // ===============================
-        // 2️⃣ Define achievement rules
+        // Achievement rules
         // ===============================
-
         const rules = [];
 
-        // 🎯 Interest-based
         if (interestCount >= 1) rules.push("Curious Mind");
         if (interestCount >= 3) rules.push("Explorer");
         if (interestCount >= 5) rules.push("All-Rounder");
 
-        // 🎓 Course-based
         if (courseCount >= 1) rules.push("First Step");
         if (courseCount >= 3) rules.push("Learning Streak");
         if (courseCount >= 5) rules.push("Knowledge Seeker");
-
-        // ===============================
-        // 3️⃣ Fetch matching achievements
-        // ===============================
 
         if (rules.length === 0) {
           await client.query("COMMIT");
@@ -103,6 +96,9 @@ export default async function handler(req, res) {
           });
         }
 
+        // ===============================
+        // Fetch achievement ids
+        // ===============================
         const achievementRes = await client.query(
           `
           SELECT achievement_id, title
@@ -113,13 +109,11 @@ export default async function handler(req, res) {
         );
 
         const achievements = achievementRes.rows;
-
-        // ===============================
-        // 4️⃣ Insert new achievements (avoid duplicates)
-        // ===============================
-
         let newlyAssigned = [];
 
+        // ===============================
+        // Insert without duplicates
+        // ===============================
         for (const a of achievements) {
 
           const exists = await client.query(
@@ -131,7 +125,6 @@ export default async function handler(req, res) {
           );
 
           if (exists.rows.length === 0) {
-
             await client.query(
               `
               INSERT INTO "UserAchievement"
