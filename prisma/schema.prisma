@@ -97,6 +97,7 @@ model Course {
   enrollments CourseEnrollment[]
   courseSkills CourseSkill[]
   courseInterests CourseInterest[]
+  savedCourses SavedCourse[]
 }
 
 model Hackathon {
@@ -172,6 +173,7 @@ model User {
   // ⭐ NEW RELATIONS
   interests               UserInterest[]
   achievements            UserAchievement[]
+  savedCourses SavedCourse[]
 }
 
 model CourseEnrollment {
@@ -437,4 +439,16 @@ model CourseInterest {
   interest    Interest @relation(fields: [interest_id], references: [interest_id], onDelete: Cascade)
 
   @@unique([course_id, interest_id])
+}
+
+model SavedCourse {
+  saved_id    Int      @id @default(autoincrement())
+  user_id     BigInt
+  course_id   Int
+  saved_at    DateTime @default(now())
+
+  user        User     @relation(fields: [user_id], references: [user_id])
+  course      Course   @relation(fields: [course_id], references: [course_id])
+
+  @@unique([user_id, course_id])
 }
