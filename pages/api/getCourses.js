@@ -35,15 +35,14 @@ export default async function handler(req, res) {
         price,
         rating,
         skill_ids,
-        interest_ids,   // ✅ NEW
+        interest_ids,
         target_group
       } = req.body;
 
-      let group = "college";
-
-      if (target_group && target_group.toLowerCase() === "school") {
-        group = "school";
-      }
+      const group =
+        target_group && target_group.toLowerCase() === "school"
+          ? "school"
+          : "college";
 
       if (!title || !description) {
         return res.status(400).json({
@@ -57,7 +56,7 @@ export default async function handler(req, res) {
       try {
         await client.query("BEGIN");
 
-        // 🔹 Insert Course
+        // Insert Course
         const courseResult = await client.query(
           `
           INSERT INTO "Course"
@@ -83,7 +82,7 @@ export default async function handler(req, res) {
 
         const course = courseResult.rows[0];
 
-        // 🔹 Link skills
+        // Link Skills
         if (Array.isArray(skill_ids) && skill_ids.length > 0) {
           for (const skill_id of skill_ids) {
             await client.query(
@@ -97,7 +96,7 @@ export default async function handler(req, res) {
           }
         }
 
-        // 🔹 Link interests (NEW)
+        // Link Interests
         if (Array.isArray(interest_ids) && interest_ids.length > 0) {
 
           const check = await client.query(
@@ -121,8 +120,8 @@ export default async function handler(req, res) {
           }
         }
 
-        // 🔔 Notifications
-        const notifResult = await client.query(
+        // Notifications
+        await client.query(
           `
           INSERT INTO "Notification"
           (user_id, title, message, type, entity_id, redirect_url, is_read, created_at)
@@ -135,7 +134,6 @@ export default async function handler(req, res) {
                  false,
                  NOW()
           FROM "User"
-          RETURNING notification_id
           `,
           [
             "New Course Available",
@@ -144,8 +142,6 @@ export default async function handler(req, res) {
             `/courses/${course.course_id}`
           ]
         );
-
-        console.log("✅ Course notifications inserted:", notifResult.rowCount);
 
         await client.query("COMMIT");
         client.release();
@@ -156,7 +152,7 @@ export default async function handler(req, res) {
             `${title} course is now available`
           );
         } catch (err) {
-          console.error("❌ Push failed:", err.message);
+          console.error("Push failed:", err.message);
         }
 
         return res.status(201).json({
@@ -173,49 +169,157 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // GET — Fetch Courses (FILTERED BY USER INTERESTS)
+    // GET — Fetch Courses
+    // school => personalized by interests
+    // college => all college courses
     // =========================================================
     else if (req.method === "GET") {
 
       const { target_group } = req.query;
 
-      const group = (target_group && target_group.toLowerCase() === "school")
-        ? "school"
-        : "college";
+      const group =
+        target_group && target_group.toLowerCase() === "school"
+          ? "school"
+          : "college";
 
-      const query = `
-        SELECT DISTINCT c.*,
-        COALESCE(
-          JSON_AGG(
-            JSON_BUILD_OBJECT('skill_id', s.skill_id, 'name', s.name)
-          ) FILTER (WHERE s.skill_id IS NOT NULL),
-          '[]'
-        ) AS skills
-        FROM "Course" c
-        LEFT JOIN "CourseSkill" cs ON c.course_id = cs.course_id
-        LEFT JOIN "Skill" s ON cs.skill_id = s.skill_id
+      let query = "";
+      let params = [];
 
-        LEFT JOIN "CourseInterest" ci ON c.course_id = ci.course_id
-        LEFT JOIN "UserInterest" ui ON ci.interest_id = ui.interest_id
+      // ========================= SCHOOL =========================
+      if (group === "school") {
 
-        WHERE c.status = 1
-        AND LOWER(c.target_group) = $1
-        AND (
-          ui.user_id = $2
-          OR NOT EXISTS (
-            SELECT 1 FROM "UserInterest" WHERE user_id = $2
+        query = `
+          SELECT
+            c.course_id,
+            c.title,
+            c.description,
+            c.provider,
+            c.instructor,
+            c.category,
+            c.level,
+            c.duration,
+            c.course_url,
+            c.price,
+            c.rating,
+            c.target_group,
+            c.status,
+            c.created_at,
+            c.updated_at,
+
+            COALESCE(
+              jsonb_agg(
+                DISTINCT jsonb_build_object(
+                  'skill_id', s.skill_id,
+                  'name', s.name
+                )
+              ) FILTER (WHERE s.skill_id IS NOT NULL),
+              '[]'::jsonb
+            ) AS skills
+
+          FROM "Course" c
+          LEFT JOIN "CourseSkill" cs ON c.course_id = cs.course_id
+          LEFT JOIN "Skill" s ON cs.skill_id = s.skill_id
+          LEFT JOIN "CourseInterest" ci ON c.course_id = ci.course_id
+          LEFT JOIN "UserInterest" ui ON ci.interest_id = ui.interest_id
+
+          WHERE c.status = 1
+          AND LOWER(c.target_group) = 'school'
+          AND (
+            ui.user_id = $1
+            OR NOT EXISTS (
+              SELECT 1 FROM "UserInterest" WHERE user_id = $1
+            )
           )
-        )
 
-        GROUP BY c.course_id
-        ORDER BY c.created_at DESC
-      `;
+          GROUP BY
+            c.course_id,
+            c.title,
+            c.description,
+            c.provider,
+            c.instructor,
+            c.category,
+            c.level,
+            c.duration,
+            c.course_url,
+            c.price,
+            c.rating,
+            c.target_group,
+            c.status,
+            c.created_at,
+            c.updated_at
 
-      const result = await pool.query(query, [group, user_id]);
+          ORDER BY c.created_at DESC
+        `;
+
+        params = [user_id];
+      }
+
+      // ========================= COLLEGE =========================
+      else {
+
+        query = `
+          SELECT
+            c.course_id,
+            c.title,
+            c.description,
+            c.provider,
+            c.instructor,
+            c.category,
+            c.level,
+            c.duration,
+            c.course_url,
+            c.price,
+            c.rating,
+            c.target_group,
+            c.status,
+            c.created_at,
+            c.updated_at,
+
+            COALESCE(
+              jsonb_agg(
+                DISTINCT jsonb_build_object(
+                  'skill_id', s.skill_id,
+                  'name', s.name
+                )
+              ) FILTER (WHERE s.skill_id IS NOT NULL),
+              '[]'::jsonb
+            ) AS skills
+
+          FROM "Course" c
+          LEFT JOIN "CourseSkill" cs ON c.course_id = cs.course_id
+          LEFT JOIN "Skill" s ON cs.skill_id = s.skill_id
+
+          WHERE c.status = 1
+          AND LOWER(c.target_group) = 'college'
+
+          GROUP BY
+            c.course_id,
+            c.title,
+            c.description,
+            c.provider,
+            c.instructor,
+            c.category,
+            c.level,
+            c.duration,
+            c.course_url,
+            c.price,
+            c.rating,
+            c.target_group,
+            c.status,
+            c.created_at,
+            c.updated_at
+
+          ORDER BY c.created_at DESC
+        `;
+
+        params = [];
+      }
+
+      const result = await pool.query(query, params);
 
       return res.status(200).json({
         success: true,
-        data: result.rows,
+        data: result.rows
       });
     }
 
@@ -224,27 +328,19 @@ export default async function handler(req, res) {
     // =========================================================
     else if (req.method === "PUT") {
 
-      const {
-        course_id,
-        title,
-        duration,
-        description,
-        target_group
-      } = req.body;
+      const { course_id, title, duration, description, target_group } = req.body;
 
-      const group = target_group
-        ? target_group.toLowerCase()
-        : null;
+      const group = target_group ? target_group.toLowerCase() : null;
 
       const result = await pool.query(
         `
         UPDATE "Course"
-        SET title=$1,
-            duration=$2,
-            description=$3,
-            target_group=COALESCE($4, target_group),
+        SET title = $1,
+            duration = $2,
+            description = $3,
+            target_group = COALESCE($4, target_group),
             updated_at = NOW()
-        WHERE course_id=$5
+        WHERE course_id = $5
         RETURNING *
         `,
         [title, duration, description, group, course_id]
@@ -264,7 +360,7 @@ export default async function handler(req, res) {
       const { course_id } = req.body;
 
       const result = await pool.query(
-        `DELETE FROM "Course" WHERE course_id=$1 RETURNING *`,
+        `DELETE FROM "Course" WHERE course_id = $1 RETURNING *`,
         [course_id]
       );
 
@@ -274,7 +370,10 @@ export default async function handler(req, res) {
       });
     }
 
-    return res.status(405).json({ message: "Method not allowed" });
+    return res.status(405).json({
+      success: false,
+      message: "Method not allowed"
+    });
 
   } catch (err) {
     console.error("COURSE API ERROR:", err);
