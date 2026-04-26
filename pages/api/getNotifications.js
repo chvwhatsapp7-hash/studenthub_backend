@@ -14,7 +14,7 @@ export default async function handler(req, res) {
     });
   }
 
-  const user_id = req.query.user_id || user.user_id;
+  const selected_user_id = req.query.user_id || user.user_id;
   const { category } = req.query;
 
   try {
@@ -27,6 +27,7 @@ export default async function handler(req, res) {
           title,
           message,
           type,
+          category,
           entity_id,
           redirect_url,
           is_read,
@@ -35,29 +36,23 @@ export default async function handler(req, res) {
         WHERE user_id = $1
       `;
 
-      const params = [user_id];
+      const params = [selected_user_id];
 
-      // ✅ personal only
-      if (category === "personal") {
-        query += `
-          AND type IN ('enrollment','application','achievement','saved')
-        `;
-      }
-
-      // ✅ public only
-      else if (category === "public") {
-        query += `
-          AND type IN ('course','job','internship','hackathon','company')
-        `;
+      // ✅ FILTER USING CATEGORY COLUMN
+      if (category === "public" || category === "personal") {
+        query += ` AND category = $2`;
+        params.push(category.toLowerCase());
       }
 
       query += ` ORDER BY created_at DESC`;
 
       const result = await pool.query(query, params);
 
+      const unreadCount = result.rows.filter(n => !n.is_read).length;
+
       return res.status(200).json({
         success: true,
-        unread_count: result.rows.filter(n => !n.is_read).length,
+        unread_count: unreadCount,
         data: result.rows
       });
     }
