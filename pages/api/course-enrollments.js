@@ -4,10 +4,8 @@ import { authenticate } from "../../lib/auth";
 
 export default async function handler(req, res) {
 
-  // ✅ CORS FIRST
   if (cors(req, res)) return;
 
-  // ✅ AUTH
   const user = authenticate(req, res);
   if (!user) {
     return res.status(401).json({
@@ -48,7 +46,7 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // POST — Enroll + initialize progress
+    // POST — Enroll + initialize progress + PERSONAL NOTIFICATION
     // =========================================================
     if (req.method === "POST") {
 
@@ -75,7 +73,7 @@ export default async function handler(req, res) {
         });
       }
 
-      // 🔹 Insert enrollment (WITH progress)
+      // 🔹 Insert enrollment
       const insert = await pool.query(
         `
         INSERT INTO "CourseEnrollment"
@@ -97,14 +95,14 @@ export default async function handler(req, res) {
       const courseTitle = courseRes.rows[0]?.title || "Course";
 
       // ======================================================
-      // 🔔 STORE NOTIFICATION
+      // 🔔 STORE PERSONAL NOTIFICATION
       // ======================================================
       try {
         await pool.query(
           `
           INSERT INTO "Notification"
-          (user_id, title, message, type, entity_id, redirect_url, is_read, created_at)
-          VALUES ($1, $2, $3, 'course', $4, $5, false, NOW())
+          (user_id, title, message, type, category, entity_id, redirect_url, is_read, created_at)
+          VALUES ($1, $2, $3, 'course_enrollment', 'personal', $4, $5, false, NOW())
           `,
           [
             user_id,

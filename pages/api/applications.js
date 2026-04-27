@@ -1,7 +1,7 @@
 import { pool } from "../../lib/database";
 import { cors } from "../../lib/cors";
 import { authenticate } from "../../lib/auth";
-import { sendNotification } from "../../lib/sendNotifications"; // optional (single user push)
+import { sendNotification } from "../../lib/sendNotifications";
 
 export default async function handler(req, res) {
   if (cors(req, res)) return;
@@ -75,7 +75,7 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // POST — APPLY + NOTIFICATION
+    // POST — APPLY + PERSONAL NOTIFICATION
     // =========================================================
     if (req.method === "POST") {
 
@@ -135,7 +135,7 @@ export default async function handler(req, res) {
       const application = result.rows[0];
 
       // ======================================================
-      // 🔔 STORE NOTIFICATION (SINGLE USER)
+      // 🔔 STORE PERSONAL NOTIFICATION
       // ======================================================
       try {
         const isJob = !!job_id;
@@ -153,14 +153,14 @@ export default async function handler(req, res) {
         await pool.query(
           `
           INSERT INTO "Notification"
-          (user_id, title, message, type, entity_id, redirect_url, is_read, created_at)
-          VALUES ($1, $2, $3, $4, $5, $6, false, NOW())
+          (user_id, title, message, type, category, entity_id, redirect_url, is_read, created_at)
+          VALUES ($1, $2, $3, $4, 'personal', $5, $6, false, NOW())
           `,
           [
             user_id,
             notifTitle,
             notifMessage,
-            isJob ? "job" : "internship",
+            isJob ? "job_application" : "internship_application",
             entityId,
             redirectUrl
           ]
@@ -171,7 +171,7 @@ export default async function handler(req, res) {
       }
 
       // ======================================================
-      // 🔥 PUSH (OPTIONAL — SAFE)
+      // 🔥 PUSH TO USER DEVICE
       // ======================================================
       try {
         await sendNotification(

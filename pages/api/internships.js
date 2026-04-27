@@ -5,10 +5,8 @@ import { sendNotificationToAll } from "../../lib/sendNotificationToAll";
 
 export default async function handler(req, res) {
 
-  // ✅ CORS FIRST
   if (cors(req, res)) return;
 
-  // ✅ AUTH
   const user = authenticate(req, res);
   if (!user) {
     return res.status(401).json({
@@ -20,7 +18,7 @@ export default async function handler(req, res) {
   try {
 
     // =========================================================
-    // POST — Create Internship + Skills + Notification
+    // POST — Create Internship + Skills + Public Notification
     // =========================================================
     if (req.method === "POST") {
 
@@ -34,7 +32,6 @@ export default async function handler(req, res) {
         skill_ids = [],
       } = req.body;
 
-      // ✅ VALIDATION
       if (!title || !company_id || !location || !description) {
         return res.status(400).json({
           success: false,
@@ -42,9 +39,9 @@ export default async function handler(req, res) {
         });
       }
 
-      console.log("📥 Creating internship:", title);
+      console.log("Creating internship:", title);
 
-      // 🔹 Insert internship
+      // Insert internship
       const internResult = await pool.query(
         `
         INSERT INTO "Internship"
@@ -57,7 +54,7 @@ export default async function handler(req, res) {
 
       const intern = internResult.rows[0];
 
-      // 🔹 Link skills
+      // Link skills
       if (skill_ids.length > 0) {
         for (const skill_id of skill_ids) {
           await pool.query(
@@ -72,24 +69,25 @@ export default async function handler(req, res) {
       }
 
       // =====================================================
-      // 🔔 STORE NOTIFICATION (FULL MODEL SUPPORT)
+      // STORE PUBLIC NOTIFICATION (ONLY COLLEGE USERS)
       // =====================================================
       try {
-        console.log("🔥 Inserting internship notifications...");
 
         const notifResult = await pool.query(
           `
           INSERT INTO "Notification"
-          (user_id, title, message, type, entity_id, redirect_url, is_read, created_at)
+          (user_id, title, message, type, category, entity_id, redirect_url, is_read, created_at)
           SELECT user_id,
                  $1,
                  $2,
-                 'internship',
+                 'internship_public',
+                 'public',
                  $3,
                  $4,
                  false,
                  NOW()
           FROM "User"
+          WHERE role_id IN (3,4)
           RETURNING notification_id
           `,
           [
@@ -100,22 +98,23 @@ export default async function handler(req, res) {
           ]
         );
 
-        console.log("✅ Notifications inserted:", notifResult.rowCount);
+        console.log("Notifications inserted:", notifResult.rowCount);
 
       } catch (err) {
-        console.error("❌ Notification insert failed:", err.message);
+        console.error("Notification insert failed:", err.message);
       }
 
       // =====================================================
-      // 🔥 PUSH NOTIFICATION (SAFE)
+      // PUSH ONLY TO COLLEGE USERS
       // =====================================================
       try {
         await sendNotificationToAll(
           "New Internship Posted",
-          `${title} internship is now available`
+          `${title} internship is now available`,
+          [3,4]
         );
       } catch (err) {
-        console.error("❌ Push failed:", err.message);
+        console.error("Push failed:", err.message);
       }
 
       return res.status(201).json({
@@ -183,7 +182,6 @@ export default async function handler(req, res) {
         [title, company_id, location, duration, stipend, description, internship_id]
       );
 
-      // 🔹 Update skills
       if (skill_ids && skill_ids.length > 0) {
         await pool.query(`DELETE FROM "InternshipSkill" WHERE internship_id = $1`, [internship_id]);
 
@@ -230,7 +228,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ message: "Method not allowed" });
 
   } catch (err) {
-    console.error("🔥 INTERNSHIP API ERROR:", err);
+    console.error("INTERNSHIP API ERROR:", err);
 
     return res.status(500).json({
       success: false,

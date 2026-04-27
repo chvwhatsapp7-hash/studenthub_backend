@@ -55,7 +55,7 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // POST — Save a course
+    // POST — Save a course + Personal Notification
     // =========================================================
     if (req.method === "POST") {
 
@@ -91,6 +91,36 @@ export default async function handler(req, res) {
         `,
         [user_id, course_id]
       );
+
+      // Get course title
+      const courseRes = await pool.query(
+        `SELECT title FROM "Course" WHERE course_id = $1`,
+        [course_id]
+      );
+
+      const courseTitle = courseRes.rows[0]?.title || "Course";
+
+      // ======================================================
+      // STORE PERSONAL NOTIFICATION
+      // ======================================================
+      try {
+        await pool.query(
+          `
+          INSERT INTO "Notification"
+          (user_id, title, message, type, category, entity_id, redirect_url, is_read, created_at)
+          VALUES ($1, $2, $3, 'course_saved', 'personal', $4, $5, false, NOW())
+          `,
+          [
+            user_id,
+            "Course Saved",
+            `${courseTitle} was added to your saved courses`,
+            course_id,
+            `/courses/${course_id}`
+          ]
+        );
+      } catch (err) {
+        console.error("Notification insert failed:", err.message);
+      }
 
       return res.status(201).json({
         success: true,

@@ -5,10 +5,8 @@ import { sendNotificationToAll } from "../../lib/sendNotificationToAll";
 
 export default async function handler(req, res) {
 
-  // ✅ CORS FIRST
   if (cors(req, res)) return;
 
-  // ✅ AUTH
   const user = authenticate(req, res);
   if (!user) {
     return res.status(401).json({
@@ -20,7 +18,7 @@ export default async function handler(req, res) {
   try {
 
     // =========================================================
-    // POST — Create Hackathon + Notification
+    // POST — Create Hackathon + Public Notification
     // =========================================================
     if (req.method === "POST") {
 
@@ -33,7 +31,6 @@ export default async function handler(req, res) {
         description
       } = req.body;
 
-      // ✅ VALIDATION
       if (!title || !organizer || !location || !start_date || !end_date) {
         return res.status(400).json({
           success: false,
@@ -41,9 +38,9 @@ export default async function handler(req, res) {
         });
       }
 
-      console.log("📥 Creating hackathon:", title);
+      console.log("Creating hackathon:", title);
 
-      // 🔹 Insert Hackathon
+      // Insert Hackathon
       const result = await pool.query(
         `
         INSERT INTO "Hackathon"
@@ -57,24 +54,25 @@ export default async function handler(req, res) {
       const hackathon = result.rows[0];
 
       // =====================================================
-      // 🔔 STORE NOTIFICATION (FULL MODEL SUPPORT)
+      // STORE PUBLIC NOTIFICATION (ONLY COLLEGE USERS)
       // =====================================================
       try {
-        console.log("🔥 Inserting notifications...");
 
         const notifResult = await pool.query(
           `
           INSERT INTO "Notification"
-          (user_id, title, message, type, entity_id, redirect_url, is_read, created_at)
+          (user_id, title, message, type, category, entity_id, redirect_url, is_read, created_at)
           SELECT user_id,
                  $1,
                  $2,
-                 'hackathon',
+                 'hackathon_public',
+                 'public',
                  $3,
                  $4,
                  false,
                  NOW()
           FROM "User"
+          WHERE role_id IN (3,4)
           RETURNING notification_id
           `,
           [
@@ -85,22 +83,23 @@ export default async function handler(req, res) {
           ]
         );
 
-        console.log("✅ Notifications inserted:", notifResult.rowCount);
+        console.log("Notifications inserted:", notifResult.rowCount);
 
       } catch (err) {
-        console.error("❌ Notification insert failed:", err.message);
+        console.error("Notification insert failed:", err.message);
       }
 
       // =====================================================
-      // 🔥 PUSH NOTIFICATION (SAFE)
+      // PUSH ONLY TO COLLEGE USERS
       // =====================================================
       try {
         await sendNotificationToAll(
           "New Hackathon Announced",
-          `${title} is now live. Participate now!`
+          `${title} is now live. Participate now!`,
+          [3,4]
         );
       } catch (err) {
-        console.error("❌ Push failed:", err.message);
+        console.error("Push failed:", err.message);
       }
 
       return res.status(201).json({
@@ -188,7 +187,7 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
-    console.error("🔥 HACKATHON API ERROR:", err);
+    console.error("HACKATHON API ERROR:", err);
 
     return res.status(500).json({
       success: false,

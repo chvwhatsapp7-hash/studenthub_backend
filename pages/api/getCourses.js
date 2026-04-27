@@ -19,7 +19,7 @@ export default async function handler(req, res) {
   try {
 
     // =========================================================
-    // POST — Create Course + Skills + Interests + Notification
+    // POST — Create Course + Skills + Interests + PUBLIC Notification
     // =========================================================
     if (req.method === "POST") {
 
@@ -43,6 +43,8 @@ export default async function handler(req, res) {
         target_group && target_group.toLowerCase() === "school"
           ? "school"
           : "college";
+
+      const notifyRoles = group === "school" ? [2] : [3,4];
 
       if (!title || !description) {
         return res.status(400).json({
@@ -120,26 +122,31 @@ export default async function handler(req, res) {
           }
         }
 
-        // Notifications
+        // =====================================================
+        // STORE PUBLIC NOTIFICATION (ROLE BASED)
+        // =====================================================
         await client.query(
           `
           INSERT INTO "Notification"
-          (user_id, title, message, type, entity_id, redirect_url, is_read, created_at)
+          (user_id, title, message, type, category, entity_id, redirect_url, is_read, created_at)
           SELECT user_id,
                  $1,
                  $2,
-                 'course',
+                 'course_public',
+                 'public',
                  $3,
                  $4,
                  false,
                  NOW()
           FROM "User"
+          WHERE role_id = ANY($5::int[])
           `,
           [
             "New Course Available",
             `${title} course is now available`,
             course.course_id,
-            `/courses/${course.course_id}`
+            `/courses/${course.course_id}`,
+            notifyRoles
           ]
         );
 
@@ -149,7 +156,8 @@ export default async function handler(req, res) {
         try {
           await sendNotificationToAll(
             "New Course Available",
-            `${title} course is now available`
+            `${title} course is now available`,
+            notifyRoles
           );
         } catch (err) {
           console.error("Push failed:", err.message);
@@ -170,8 +178,6 @@ export default async function handler(req, res) {
 
     // =========================================================
     // GET — Fetch Courses
-    // school => personalized by interests
-    // college => all college courses
     // =========================================================
     else if (req.method === "GET") {
 
@@ -185,7 +191,6 @@ export default async function handler(req, res) {
       let query = "";
       let params = [];
 
-      // ========================= SCHOOL =========================
       if (group === "school") {
 
         query = `
@@ -232,21 +237,9 @@ export default async function handler(req, res) {
           )
 
           GROUP BY
-            c.course_id,
-            c.title,
-            c.description,
-            c.provider,
-            c.instructor,
-            c.category,
-            c.level,
-            c.duration,
-            c.course_url,
-            c.price,
-            c.rating,
-            c.target_group,
-            c.status,
-            c.created_at,
-            c.updated_at
+            c.course_id,c.title,c.description,c.provider,c.instructor,
+            c.category,c.level,c.duration,c.course_url,c.price,c.rating,
+            c.target_group,c.status,c.created_at,c.updated_at
 
           ORDER BY c.created_at DESC
         `;
@@ -254,7 +247,6 @@ export default async function handler(req, res) {
         params = [user_id];
       }
 
-      // ========================= COLLEGE =========================
       else {
 
         query = `
@@ -293,21 +285,9 @@ export default async function handler(req, res) {
           AND LOWER(c.target_group) = 'college'
 
           GROUP BY
-            c.course_id,
-            c.title,
-            c.description,
-            c.provider,
-            c.instructor,
-            c.category,
-            c.level,
-            c.duration,
-            c.course_url,
-            c.price,
-            c.rating,
-            c.target_group,
-            c.status,
-            c.created_at,
-            c.updated_at
+            c.course_id,c.title,c.description,c.provider,c.instructor,
+            c.category,c.level,c.duration,c.course_url,c.price,c.rating,
+            c.target_group,c.status,c.created_at,c.updated_at
 
           ORDER BY c.created_at DESC
         `;
@@ -352,9 +332,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // =========================================================
     // DELETE
-    // =========================================================
     else if (req.method === "DELETE") {
 
       const { course_id } = req.body;

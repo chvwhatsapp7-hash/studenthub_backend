@@ -5,10 +5,8 @@ import { sendNotificationToAll } from "../../lib/sendNotificationToAll";
 
 export default async function handler(req, res) {
 
-  // ✅ CORS FIRST
   if (cors(req, res)) return;
 
-  // ✅ AUTH
   const user = authenticate(req, res);
   if (!user) {
     return res.status(401).json({
@@ -20,7 +18,7 @@ export default async function handler(req, res) {
   try {
 
     // =========================================================
-    // POST — Create Job + Skills + Notification
+    // POST — Create Job + Skills + Public Notification
     // =========================================================
     if (req.method === "POST") {
 
@@ -43,9 +41,9 @@ export default async function handler(req, res) {
         });
       }
 
-      console.log("📥 Creating job:", title);
+      console.log("Creating job:", title);
 
-      // 🔹 Insert Job
+      // Insert Job
       const jobResult = await pool.query(
         `
         INSERT INTO "Job"
@@ -69,7 +67,7 @@ export default async function handler(req, res) {
 
       const job = jobResult.rows[0];
 
-      // 🔹 Insert skills
+      // Insert skills
       if (skills.length > 0) {
         for (const skill_id of skills) {
           await pool.query(
@@ -84,24 +82,25 @@ export default async function handler(req, res) {
       }
 
       // =====================================================
-      // 🔔 STORE NOTIFICATION (FULL MODEL SUPPORT)
+      // STORE PUBLIC NOTIFICATION (ONLY COLLEGE USERS)
       // =====================================================
       try {
-        console.log("🔥 Inserting job notifications...");
 
         const notifResult = await pool.query(
           `
           INSERT INTO "Notification"
-          (user_id, title, message, type, entity_id, redirect_url, is_read, created_at)
+          (user_id, title, message, type, category, entity_id, redirect_url, is_read, created_at)
           SELECT user_id,
                  $1,
                  $2,
-                 'job',
+                 'job_public',
+                 'public',
                  $3,
                  $4,
                  false,
                  NOW()
           FROM "User"
+          WHERE role_id IN (3,4)
           RETURNING notification_id
           `,
           [
@@ -112,22 +111,23 @@ export default async function handler(req, res) {
           ]
         );
 
-        console.log("✅ Notifications inserted:", notifResult.rowCount);
+        console.log("Notifications inserted:", notifResult.rowCount);
 
       } catch (err) {
-        console.error("❌ Notification insert failed:", err.message);
+        console.error("Notification insert failed:", err.message);
       }
 
       // =====================================================
-      // 🔥 PUSH NOTIFICATION (SAFE)
+      // PUSH ONLY TO COLLEGE USERS
       // =====================================================
       try {
         await sendNotificationToAll(
           "New Job Posted",
-          `${title} job is now available`
+          `${title} job is now available`,
+          [3,4]
         );
       } catch (err) {
-        console.error("❌ Push failed:", err.message);
+        console.error("Push failed:", err.message);
       }
 
       return res.status(201).json({
@@ -197,7 +197,6 @@ export default async function handler(req, res) {
         [title, company_id, location, description, salary_min, salary_max, job_type, experience_level, job_id]
       );
 
-      // 🔹 Update skills
       if (skills.length > 0) {
         await pool.query(`DELETE FROM "JobSkill" WHERE job_id = $1`, [job_id]);
 
@@ -246,7 +245,7 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
-    console.error("🔥 JOB API ERROR:", err);
+    console.error("JOB API ERROR:", err);
 
     return res.status(500).json({
       success: false,

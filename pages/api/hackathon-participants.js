@@ -2,15 +2,10 @@ import pool from "../../lib/db";
 import { cors } from "../../lib/cors";
 import { authenticate } from "../../lib/auth";
 
-// ❗ Keep this commented unless you create the file
-// import { sendNotification } from "../../lib/sendNotifications";
-
 export default async function handler(req, res) {
 
-  // ✅ CORS FIRST
   if (cors(req, res)) return;
 
-  // ✅ AUTH
   const user = authenticate(req, res);
   if (!user) {
     return res.status(401).json({
@@ -19,12 +14,12 @@ export default async function handler(req, res) {
     });
   }
 
-  const user_id = user.user_id; // 🔥 always from token
+  const user_id = user.user_id;
 
   try {
 
     // =========================================================
-    // POST — Register + Notification
+    // POST — Register + Personal Notification
     // =========================================================
     if (req.method === "POST") {
 
@@ -37,7 +32,7 @@ export default async function handler(req, res) {
         });
       }
 
-      // 🔍 Duplicate check
+      // Duplicate check
       const check = await pool.query(
         `SELECT 1 FROM "HackathonParticipant"
          WHERE user_id = $1 AND hackathon_id = $2`,
@@ -51,7 +46,7 @@ export default async function handler(req, res) {
         });
       }
 
-      // 🔹 Insert
+      // Insert registration
       const result = await pool.query(
         `
         INSERT INTO "HackathonParticipant"
@@ -64,7 +59,7 @@ export default async function handler(req, res) {
 
       const participant = result.rows[0];
 
-      // 🔍 Get hackathon title
+      // Get hackathon title
       const hackRes = await pool.query(
         `SELECT title FROM "Hackathon" WHERE hackathon_id = $1`,
         [hackathon_id]
@@ -73,14 +68,14 @@ export default async function handler(req, res) {
       const hackathonTitle = hackRes.rows[0]?.title || "Hackathon";
 
       // ======================================================
-      // 🔔 STORE NOTIFICATION
+      // STORE PERSONAL NOTIFICATION
       // ======================================================
       try {
         await pool.query(
           `
           INSERT INTO "Notification"
-          (user_id, title, message, type, entity_id, redirect_url, is_read, created_at)
-          VALUES ($1, $2, $3, 'hackathon', $4, $5, false, NOW())
+          (user_id, title, message, type, category, entity_id, redirect_url, is_read, created_at)
+          VALUES ($1, $2, $3, 'hackathon_application', 'personal', $4, $5, false, NOW())
           `,
           [
             user_id,
@@ -91,20 +86,7 @@ export default async function handler(req, res) {
           ]
         );
       } catch (err) {
-        console.error("❌ Notification insert failed:", err.message);
-      }
-
-      // ======================================================
-      // 🔥 PUSH (OPTIONAL — SAFE)
-      // ======================================================
-      try {
-        // await sendNotification(
-        //   user_id,
-        //   "Registration Successful",
-        //   `You registered for ${hackathonTitle}`
-        // );
-      } catch (err) {
-        console.error("❌ Push failed:", err.message);
+        console.error("Notification insert failed:", err.message);
       }
 
       return res.status(201).json({

@@ -14,7 +14,6 @@ export default async function handler(req, res) {
     });
   }
 
-  // ✅ manual user_id support + token fallback
   const user_id = req.query.user_id || req.body.user_id || user.user_id;
 
   try {
@@ -48,7 +47,7 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // POST — Evaluate & Assign Achievements
+    // POST — Evaluate & Assign Achievements + Personal Notifications
     // =========================================================
     if (req.method === "POST") {
 
@@ -57,9 +56,7 @@ export default async function handler(req, res) {
       try {
         await client.query("BEGIN");
 
-        // ===============================
         // Count user activities
-        // ===============================
         const interestCountRes = await client.query(
           `SELECT COUNT(*) FROM "UserInterest" WHERE user_id = $1`,
           [user_id]
@@ -73,9 +70,7 @@ export default async function handler(req, res) {
         const interestCount = parseInt(interestCountRes.rows[0].count);
         const courseCount = parseInt(courseCountRes.rows[0].count);
 
-        // ===============================
         // Achievement rules
-        // ===============================
         const rules = [];
 
         if (interestCount >= 1) rules.push("Curious Mind");
@@ -96,9 +91,7 @@ export default async function handler(req, res) {
           });
         }
 
-        // ===============================
         // Fetch achievement ids
-        // ===============================
         const achievementRes = await client.query(
           `
           SELECT achievement_id, title
@@ -111,9 +104,7 @@ export default async function handler(req, res) {
         const achievements = achievementRes.rows;
         let newlyAssigned = [];
 
-        // ===============================
         // Insert without duplicates
-        // ===============================
         for (const a of achievements) {
 
           const exists = await client.query(
@@ -125,6 +116,7 @@ export default async function handler(req, res) {
           );
 
           if (exists.rows.length === 0) {
+
             await client.query(
               `
               INSERT INTO "UserAchievement"
@@ -132,6 +124,24 @@ export default async function handler(req, res) {
               VALUES ($1, $2, NOW())
               `,
               [user_id, a.achievement_id]
+            );
+
+            // ============================================
+            // STORE PERSONAL NOTIFICATION
+            // ============================================
+            await client.query(
+              `
+              INSERT INTO "Notification"
+              (user_id, title, message, type, category, entity_id, redirect_url, is_read, created_at)
+              VALUES ($1, $2, $3, 'achievement_unlock', 'personal', $4, $5, false, NOW())
+              `,
+              [
+                user_id,
+                "Achievement Unlocked",
+                `You earned "${a.title}"`,
+                a.achievement_id,
+                `/achievements/${a.achievement_id}`
+              ]
             );
 
             newlyAssigned.push(a.title);

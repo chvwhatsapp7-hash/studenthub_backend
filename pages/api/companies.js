@@ -5,17 +5,7 @@ import { sendNotificationToAll } from "../../lib/sendNotificationToAll";
 
 export default async function handler(req, res) {
 
-  // ✅ CORS FIRST
   if (cors(req, res)) return;
-
-  // ✅ AUTH (optional — enable if needed)
-  // const user = authenticate(req, res);
-  // if (!user) {
-  //   return res.status(401).json({
-  //     success: false,
-  //     message: "Unauthorized"
-  //   });
-  // }
 
   try {
 
@@ -35,7 +25,7 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // POST — Create Company + Notification
+    // POST — Create Company + PUBLIC NOTIFICATION
     // =========================================================
     else if (req.method === "POST") {
 
@@ -50,7 +40,6 @@ export default async function handler(req, res) {
         founded_year
       } = req.body;
 
-      // ✅ VALIDATION
       if (!name) {
         return res.status(400).json({
           success: false,
@@ -83,24 +72,25 @@ export default async function handler(req, res) {
       console.log("📥 Company created:", name);
 
       // =====================================================
-      // 🔔 STORE NOTIFICATION (FULL MODEL SUPPORT)
+      // 🔔 STORE PUBLIC NOTIFICATION (ONLY COLLEGE USERS)
       // =====================================================
       try {
-        console.log("🔥 Inserting company notifications...");
 
         const notifResult = await pool.query(
           `
           INSERT INTO "Notification"
-          (user_id, title, message, type, entity_id, redirect_url, is_read, created_at)
+          (user_id, title, message, type, category, entity_id, redirect_url, is_read, created_at)
           SELECT user_id,
                  $1,
                  $2,
-                 'company',
+                 'company_public',
+                 'public',
                  $3,
                  $4,
                  false,
                  NOW()
           FROM "User"
+          WHERE role_id IN (3,4)
           RETURNING notification_id
           `,
           [
@@ -118,12 +108,13 @@ export default async function handler(req, res) {
       }
 
       // =====================================================
-      // 🔥 PUSH NOTIFICATION (SAFE)
+      // 🔥 PUSH ONLY TO COLLEGE USERS
       // =====================================================
       try {
         await sendNotificationToAll(
           "New Company Added",
-          `${name} has joined the platform`
+          `${name} has joined the platform`,
+          [3,4]
         );
       } catch (err) {
         console.error("❌ Push failed:", err.message);
