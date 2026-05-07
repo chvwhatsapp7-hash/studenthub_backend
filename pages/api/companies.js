@@ -1,6 +1,5 @@
 import { pool } from "../../lib/database";
 import { cors } from "../../lib/cors";
-import { authenticate } from "../../lib/auth";
 import { sendNotificationToAll } from "../../lib/sendNotificationToAll";
 
 export default async function handler(req, res) {
@@ -25,7 +24,7 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // POST — Create Company + PUBLIC NOTIFICATION
+    // POST — Create Company + Public Notification
     // =========================================================
     else if (req.method === "POST") {
 
@@ -47,11 +46,21 @@ export default async function handler(req, res) {
         });
       }
 
-      // 🔹 Insert Company
       const result = await pool.query(
         `
         INSERT INTO "Company"
-        (name, description, industry, website, logo_url, location, company_size, founded_year, created_at, updated_at)
+        (
+          name,
+          description,
+          industry,
+          website,
+          logo_url,
+          location,
+          company_size,
+          founded_year,
+          created_at,
+          updated_at
+        )
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW(),NOW())
         RETURNING *
         `,
@@ -69,14 +78,8 @@ export default async function handler(req, res) {
 
       const company = result.rows[0];
 
-      console.log("📥 Company created:", name);
-
-      // =====================================================
-      // 🔔 STORE PUBLIC NOTIFICATION (ONLY COLLEGE USERS)
-      // =====================================================
       try {
-
-        const notifResult = await pool.query(
+        await pool.query(
           `
           INSERT INTO "Notification"
           (user_id, title, message, type, category, entity_id, redirect_url, is_read, created_at)
@@ -91,7 +94,6 @@ export default async function handler(req, res) {
                  NOW()
           FROM "User"
           WHERE role_id IN (3,4)
-          RETURNING notification_id
           `,
           [
             "New Company Added",
@@ -100,16 +102,10 @@ export default async function handler(req, res) {
             `/companies/${company.company_id}`
           ]
         );
-
-        console.log("✅ Notifications inserted:", notifResult.rowCount);
-
       } catch (err) {
-        console.error("❌ Notification insert failed:", err.message);
+        console.error("Notification insert failed:", err.message);
       }
 
-      // =====================================================
-      // 🔥 PUSH ONLY TO COLLEGE USERS
-      // =====================================================
       try {
         await sendNotificationToAll(
           "New Company Added",
@@ -117,7 +113,7 @@ export default async function handler(req, res) {
           [3,4]
         );
       } catch (err) {
-        console.error("❌ Push failed:", err.message);
+        console.error("Push failed:", err.message);
       }
 
       return res.status(201).json({
@@ -128,11 +124,21 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // PUT — Update Company
+    // PUT — Update Full Company
     // =========================================================
     else if (req.method === "PUT") {
 
-      const { company_id, name, location, description } = req.body;
+      const {
+        company_id,
+        name,
+        description,
+        industry,
+        website,
+        logo_url,
+        location,
+        company_size,
+        founded_year
+      } = req.body;
 
       if (!company_id) {
         return res.status(400).json({
@@ -145,13 +151,28 @@ export default async function handler(req, res) {
         `
         UPDATE "Company"
         SET name=$1,
-            location=$2,
-            description=$3,
+            description=$2,
+            industry=$3,
+            website=$4,
+            logo_url=$5,
+            location=$6,
+            company_size=$7,
+            founded_year=$8,
             updated_at=NOW()
-        WHERE company_id=$4
+        WHERE company_id=$9
         RETURNING *
         `,
-        [name, location, description, company_id]
+        [
+          name,
+          description,
+          industry,
+          website,
+          logo_url,
+          location,
+          company_size,
+          founded_year,
+          company_id
+        ]
       );
 
       if (result.rows.length === 0) {
@@ -183,7 +204,7 @@ export default async function handler(req, res) {
       }
 
       const result = await pool.query(
-        `DELETE FROM "Company" WHERE company_id=$1 RETURNING *`,
+        `DELETE FROM "Company" WHERE company_id = $1 RETURNING *`,
         [company_id]
       );
 
@@ -207,7 +228,7 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
-    console.error("🔥 COMPANY API ERROR:", err);
+    console.error("COMPANY API ERROR:", err);
 
     return res.status(500).json({
       success: false,
