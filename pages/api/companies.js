@@ -51,7 +51,6 @@ export default async function handler(req, res) {
         description,
         industry,
         website,
-        logo_url,
         location,
         company_size,
         founded_year
