@@ -1,6 +1,22 @@
 import { pool } from "../../../lib/database";
 import { cors } from "../../../lib/cors";
 import { authenticate } from "../../../lib/auth";
+import { upload } from "../../../lib/cloudinary";
+
+export const config = {
+  api: {
+    bodyParser: false
+  }
+};
+
+function runMiddleware(req, res, fn) {
+  return new Promise((resolve, reject) => {
+    fn(req, res, (result) => {
+      if (result instanceof Error) return reject(result);
+      return resolve(result);
+    });
+  });
+}
 
 export default async function handler(req, res) {
   const user = authenticate(req, res);
@@ -123,7 +139,13 @@ export default async function handler(req, res) {
     // =========================================================
     if (req.method === "PUT") {
 
+      await runMiddleware(req, res, upload.single("file"));
+
       const { user_id, skills, ...fields } = req.body;
+
+      if (req.file) {
+        fields.resume_url = uploadResult.secure_url;
+      }
 
       // ✅ FIXED: rejects "null" string, undefined, non-numeric
       if (!user_id || user_id === 'null' || user_id === 'undefined' || isNaN(Number(user_id))) {
