@@ -144,7 +144,7 @@ export default async function handler(req, res) {
       const { user_id, skills, ...fields } = req.body;
 
       if (req.file) {
-        fields.resume_url = uploadResult.secure_url;
+        fields.resume_url = req.file.path; // ✅ Cloudinary URL from multer
       }
 
       // ✅ FIXED: rejects "null" string, undefined, non-numeric
