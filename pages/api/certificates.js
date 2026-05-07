@@ -40,6 +40,8 @@ export default async function handler(req, res) {
 
       await runMiddleware(req, res, upload.single("file"));
 
+      console.log("REQ FILE:", req.file);
+
       const {
         user_id,
         title,
