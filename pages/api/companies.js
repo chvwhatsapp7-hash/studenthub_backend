@@ -1,6 +1,22 @@
 import { pool } from "../../lib/database";
 import { cors } from "../../lib/cors";
 import { sendNotificationToAll } from "../../lib/sendNotificationToAll";
+import { upload } from "../../lib/cloudinary";
+
+export const config = {
+  api: {
+    bodyParser: false
+  }
+};
+
+function runMiddleware(req, res, fn) {
+  return new Promise((resolve, reject) => {
+    fn(req, res, (result) => {
+      if (result instanceof Error) return reject(result);
+      return resolve(result);
+    });
+  });
+}
 
 export default async function handler(req, res) {
 
@@ -28,6 +44,8 @@ export default async function handler(req, res) {
     // =========================================================
     else if (req.method === "POST") {
 
+      await runMiddleware(req, res, upload.single("file"));
+
       const {
         name,
         description,
@@ -38,6 +56,8 @@ export default async function handler(req, res) {
         company_size,
         founded_year
       } = req.body;
+
+      const logo_url = req.file ? req.file.path : req.body.logo_url ||null; // ✅ Cloudinary URL from multer
 
       if (!name) {
         return res.status(400).json({
