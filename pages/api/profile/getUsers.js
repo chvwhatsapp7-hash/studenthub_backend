@@ -33,9 +33,25 @@ export default async function handler(req, res) {
       const { user_id } = req.query;
 
       // ✅ FIXED: rejects "null" string, undefined, non-numeric
-      if (!user_id || user_id === 'null' || user_id === 'undefined' || isNaN(Number(user_id))) {
-        return res.status(400).json({ success: false, message: "user_id is required" });
-      }
+      if (!user_id) {
+
+  const allUsers = await pool.query(`
+    SELECT 
+      u.user_id,
+      u.full_name,
+      u.email,
+      u.resume_url,
+      r.role_name
+    FROM "User" u
+    JOIN "Role" r ON u.role_id = r.role_id
+    ORDER BY u.created_at DESC
+  `);
+
+  return res.status(200).json({
+    success: true,
+    data: allUsers.rows
+  });
+}
       const parsedUserId = parseInt(user_id, 10); // ✅ safe integer
 
       const userQuery = `
