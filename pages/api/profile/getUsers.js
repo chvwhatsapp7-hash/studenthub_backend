@@ -160,8 +160,15 @@ export default async function handler(req, res) {
       const { user_id, skills, ...fields } = req.body;
 
       if (req.file) {
-        fields.resume_url = req.file.path; // ✅ Cloudinary URL from multer
-      }
+
+  if (req.body.upload_type === "resume") {
+    fields.resume_url = req.file.path;
+  }
+
+  if (req.body.upload_type === "profile") {
+    fields.profile_image_url = req.file.path;
+  }
+}
 
       // ✅ FIXED: rejects "null" string, undefined, non-numeric
       if (!user_id || user_id === 'null' || user_id === 'undefined' || isNaN(Number(user_id))) {
@@ -188,7 +195,7 @@ export default async function handler(req, res) {
       const allowedFields = [
         "full_name", "email", "phone", "university", "degree",
         "graduation_year", "resume_url", "linkedin_url", "github_url",
-        "about_me", "address", "age","role_id", "class","school_name","goal","status",
+        "about_me", "address", "age","role_id", "class","school_name","goal","status","profile_image_url",
       ];
 
       const updates = Object.entries(fields).filter(
