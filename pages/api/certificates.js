@@ -34,9 +34,8 @@ export default async function handler(req, res) {
   try {
 
     // =========================================================
-    // POST — Upload Certificate + Save to DB
+    // ✅ POST — Upload Certificate + Save to DB
     // =========================================================
-    
     if (req.method === "POST") {
 
       await runMiddleware(req, res, upload.single("file"));
@@ -50,15 +49,43 @@ export default async function handler(req, res) {
         issue_date
       } = req.body;
 
-      if (!user_id || !title || !issuer) {
+      // =====================================================
+      // ✅ VALIDATION
+      // =====================================================
+      if (
+        !user_id ||
+        user_id === "null" ||
+        user_id === "undefined" ||
+        isNaN(Number(user_id))
+      ) {
         return res.status(400).json({
           success: false,
-          message: "user_id, title, issuer are required"
+          message: "Valid user_id is required"
         });
       }
 
-      const file_url = req.file ? req.file.path : null;
+      if (!title || !issuer) {
+        return res.status(400).json({
+          success: false,
+          message: "title and issuer are required"
+        });
+      }
 
+      // =====================================================
+      // ✅ FILE REQUIRED
+      // =====================================================
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          message: "Certificate file is required"
+        });
+      }
+
+      const file_url = req.file.path;
+
+      // =====================================================
+      // ✅ INSERT CERTIFICATE
+      // =====================================================
       const result = await pool.query(
         `
         INSERT INTO "Certificate"
@@ -90,16 +117,22 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // DELETE
+    // ✅ DELETE CERTIFICATE
     // =========================================================
     if (req.method === "DELETE") {
 
       const { certificate_id } = req.body;
 
-      if (!certificate_id) {
+      // =====================================================
+      // ✅ VALIDATION
+      // =====================================================
+      if (
+        !certificate_id ||
+        isNaN(Number(certificate_id))
+      ) {
         return res.status(400).json({
           success: false,
-          message: "certificate_id is required"
+          message: "Valid certificate_id is required"
         });
       }
 
@@ -126,16 +159,24 @@ export default async function handler(req, res) {
     }
 
     // =========================================================
-    // GET
+    // ✅ GET USER CERTIFICATES
     // =========================================================
     if (req.method === "GET") {
 
       const { user_id } = req.query;
 
-      if (!user_id) {
+      // =====================================================
+      // ✅ VALIDATION
+      // =====================================================
+      if (
+        !user_id ||
+        user_id === "null" ||
+        user_id === "undefined" ||
+        isNaN(Number(user_id))
+      ) {
         return res.status(400).json({
           success: false,
-          message: "user_id is required"
+          message: "Valid user_id is required"
         });
       }
 
@@ -155,6 +196,9 @@ export default async function handler(req, res) {
       });
     }
 
+    // =========================================================
+    // ❌ METHOD NOT ALLOWED
+    // =========================================================
     return res.status(405).json({
       success: false,
       message: "Method not allowed"

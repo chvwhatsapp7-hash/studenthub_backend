@@ -1,7 +1,7 @@
 import pool from "../../../lib/db";
 import { cors } from "../../../lib/cors";
 import { authenticate } from "../../../lib/auth";
-import {upload} from "../../../lib/cloudinary";
+import { upload } from "../../../lib/cloudinary";
 
 export const config = {
   api: {
@@ -26,6 +26,7 @@ export default async function handler(req, res) {
   if (cors(req, res)) return;
 
   const user = authenticate(req, res);
+
   if (!user) {
     return res.status(401).json({
       success: false,
@@ -33,12 +34,14 @@ export default async function handler(req, res) {
     });
   }
 
-  // ✅ manual support + token fallback
-  const user_id = req.query.user_id || req.body.user_id || user.user_id;
-
   try {
 
+    // =====================================================
+    // ✅ GET SCHOOL PROFILE
+    // =====================================================
     if (req.method === "GET") {
+
+      const user_id = req.query.user_id || user.user_id;
 
       // 🔹 USER BASIC
       const userQuery = `
@@ -66,7 +69,7 @@ export default async function handler(req, res) {
         WHERE ce.user_id = $1
       `;
 
-      // 🔹 SAVED COURSES ✅ NEW
+      // 🔹 SAVED COURSES
       const savedCourseQuery = `
         SELECT
           c.course_id,
@@ -94,11 +97,11 @@ export default async function handler(req, res) {
           a.title,
           a.icon
         FROM "UserAchievement" ua
-        JOIN "Achievement" a ON ua.achievement_id = a.achievement_id
+        JOIN "Achievement" a
+        ON ua.achievement_id = a.achievement_id
         WHERE ua.user_id = $1
       `;
 
-      // 🚀 Parallel Queries
       const [
         userRes,
         courseRes,
@@ -126,7 +129,6 @@ export default async function handler(req, res) {
       const achievements = achievementRes.rows;
       const savedCourses = savedCourseRes.rows;
 
-      // 🔹 STATS
       const stats = {
         coursesEnrolled: courses.length,
         coursesCompleted: courses.filter(c => c.completed).length,
@@ -147,84 +149,94 @@ export default async function handler(req, res) {
       });
     }
 
+    // =====================================================
+    // ✅ UPDATE SCHOOL PROFILE
+    // =====================================================
     if (req.method === "PUT") {
 
-  await runMiddleware(req, res, upload.single("file"));
+      await runMiddleware(req, res, upload.single("file"));
 
-  const {
-    full_name,
-    class: userClass,
-    school_name,
-    goal,
-    about_me
-  } = req.body;
+      const user_id = req.body.user_id || user.user_id;
 
-  const updates = [];
-  const values = [];
+      const {
+        full_name,
+        class: userClass,
+        school_name,
+        goal,
+        about_me
+      } = req.body;
 
-  if (full_name) {
-    values.push(full_name);
-    updates.push(`full_name = $${values.length}`);
-  }
+      const updates = [];
+      const values = [];
 
-  if (userClass) {
-    values.push(userClass);
-    updates.push(`class = $${values.length}`);
-  }
+      if (full_name) {
+        values.push(full_name);
+        updates.push(`full_name = $${values.length}`);
+      }
 
-  if (school_name) {
-    values.push(school_name);
-    updates.push(`school_name = $${values.length}`);
-  }
+      if (userClass) {
+        values.push(userClass);
+        updates.push(`class = $${values.length}`);
+      }
 
-  if (goal) {
-    values.push(goal);
-    updates.push(`goal = $${values.length}`);
-  }
+      if (school_name) {
+        values.push(school_name);
+        updates.push(`school_name = $${values.length}`);
+      }
 
-  if (about_me) {
-    values.push(about_me);
-    updates.push(`about_me = $${values.length}`);
-  }
+      if (goal) {
+        values.push(goal);
+        updates.push(`goal = $${values.length}`);
+      }
 
-  if (req.file) {
-    values.push(req.file.path);
-    updates.push(`profile_image_url = $${values.length}`);
-  }
+      if (about_me) {
+        values.push(about_me);
+        updates.push(`about_me = $${values.length}`);
+      }
 
-  if (updates.length === 0) {
-    return res.status(400).json({
-      success: false,
-      message: "No fields provided"
-    });
-  }
+      // ✅ PROFILE IMAGE
+      if (req.file) {
+        values.push(req.file.path);
+        updates.push(`profile_image_url = $${values.length}`);
+      }
 
-  values.push(user_id);
+      if (updates.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "No fields provided"
+        });
+      }
 
-  const query = `
-    UPDATE "User"
-    SET
-      ${updates.join(", ")},
-      updated_at = NOW()
-    WHERE user_id = $${values.length}
-    RETURNING *
-  `;
+      values.push(user_id);
 
-  const result = await pool.query(query, values);
+      const query = `
+        UPDATE "User"
+        SET
+          ${updates.join(", ")},
+          updated_at = NOW()
+        WHERE user_id = $${values.length}
+        RETURNING *
+      `;
 
-  return res.status(200).json({
-    success: true,
-    message: "Profile updated successfully",
-    data: result.rows[0]
-  });
-}
+      const result = await pool.query(query, values);
 
+      return res.status(200).json({
+        success: true,
+        message: "Profile updated successfully",
+        data: result.rows[0]
+      });
+    }
+
+    // =====================================================
+    // ❌ METHOD NOT ALLOWED
+    // =====================================================
     return res.status(405).json({
       success: false,
       message: "Method not allowed"
     });
 
   } catch (err) {
+
     console.error("SCHOOL PROFILE ERROR:", err);
 
     return res.status(500).json({
