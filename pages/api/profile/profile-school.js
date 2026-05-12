@@ -160,7 +160,7 @@ export default async function handler(req, res) {
   } = req.body;
 
   const updates = [];
-  const values = [user_id];
+  const values = [];
 
   if (full_name) {
     values.push(full_name);
@@ -187,7 +187,6 @@ export default async function handler(req, res) {
     updates.push(`about_me = $${values.length}`);
   }
 
-  // ✅ Profile Image Upload
   if (req.file) {
     values.push(req.file.path);
     updates.push(`profile_image_url = $${values.length}`);
@@ -207,15 +206,8 @@ export default async function handler(req, res) {
     SET
       ${updates.join(", ")},
       updated_at = NOW()
-    WHERE user_id = $1
-    RETURNING
-      user_id,
-      full_name,
-      class,
-      school_name,
-      goal,
-      about_me,
-      profile_image_url
+    WHERE user_id = $${values.length}
+    RETURNING *
   `;
 
   const result = await pool.query(query, values);
