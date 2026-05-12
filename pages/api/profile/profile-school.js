@@ -1,6 +1,25 @@
 import pool from "../../../lib/db";
 import { cors } from "../../../lib/cors";
 import { authenticate } from "../../../lib/auth";
+import {upload} from "../../../lib/cloudinary";
+
+export const config = {
+  api: {
+    bodyParser: false
+  }
+};
+
+function runMiddleware(req, res, fn) {
+  return new Promise((resolve, reject) => {
+    fn(req, res, (result) => {
+      if (result instanceof Error) {
+        reject(result);
+      } else {
+        resolve(result);
+      }
+    });
+  });
+}
 
 export default async function handler(req, res) {
 
@@ -29,7 +48,8 @@ export default async function handler(req, res) {
           class,
           school_name,
           goal,
-          about_me
+          about_me,
+          profile_image_url
         FROM "User"
         WHERE user_id = $1
       `;
@@ -126,6 +146,86 @@ export default async function handler(req, res) {
         }
       });
     }
+
+    if (req.method === "PUT") {
+
+  await runMiddleware(req, res, upload.single("file"));
+
+  const {
+    full_name,
+    class: userClass,
+    school_name,
+    goal,
+    about_me
+  } = req.body;
+
+  const updates = [];
+  const values = [user_id];
+
+  if (full_name) {
+    values.push(full_name);
+    updates.push(`full_name = $${values.length}`);
+  }
+
+  if (userClass) {
+    values.push(userClass);
+    updates.push(`class = $${values.length}`);
+  }
+
+  if (school_name) {
+    values.push(school_name);
+    updates.push(`school_name = $${values.length}`);
+  }
+
+  if (goal) {
+    values.push(goal);
+    updates.push(`goal = $${values.length}`);
+  }
+
+  if (about_me) {
+    values.push(about_me);
+    updates.push(`about_me = $${values.length}`);
+  }
+
+  // ✅ Profile Image Upload
+  if (req.file) {
+    values.push(req.file.path);
+    updates.push(`profile_image_url = $${values.length}`);
+  }
+
+  if (updates.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: "No fields provided"
+    });
+  }
+
+  values.push(user_id);
+
+  const query = `
+    UPDATE "User"
+    SET
+      ${updates.join(", ")},
+      updated_at = NOW()
+    WHERE user_id = $1
+    RETURNING
+      user_id,
+      full_name,
+      class,
+      school_name,
+      goal,
+      about_me,
+      profile_image_url
+  `;
+
+  const result = await pool.query(query, values);
+
+  return res.status(200).json({
+    success: true,
+    message: "Profile updated successfully",
+    data: result.rows[0]
+  });
+}
 
     return res.status(405).json({
       success: false,
