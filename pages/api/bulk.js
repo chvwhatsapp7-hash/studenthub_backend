@@ -25,7 +25,8 @@ export default async function handler(req, res) {
         type,
         page = 1,
         limit = 10,
-        search = ""
+        search = "",
+        searchColumn = "Name"
       } = req.query;
 
       const offset = (page - 1) * limit;
@@ -35,6 +36,29 @@ export default async function handler(req, res) {
       // =========================================================
 
       if (type === "users") {
+
+        const buildWhereClause = (paramIndex) => {
+          if (searchColumn === 'Name') return `WHERE ($${paramIndex} = '' OR u.full_name ILIKE '%' || $${paramIndex} || '%')`;
+          if (searchColumn === 'Email') return `WHERE ($${paramIndex} = '' OR u.email ILIKE '%' || $${paramIndex} || '%')`;
+          if (searchColumn === 'Phone') return `WHERE ($${paramIndex} = '' OR u.phone ILIKE '%' || $${paramIndex} || '%')`;
+          if (searchColumn === 'Institution') return `WHERE ($${paramIndex} = '' OR u.university ILIKE '%' || $${paramIndex} || '%' OR u.school_name ILIKE '%' || $${paramIndex} || '%')`;
+          if (searchColumn === 'Degree/Class') return `WHERE ($${paramIndex} = '' OR u.degree ILIKE '%' || $${paramIndex} || '%' OR u.class ILIKE '%' || $${paramIndex} || '%')`;
+          if (searchColumn === 'Role') return `WHERE ($${paramIndex} = '' OR r.role_name ILIKE '%' || $${paramIndex} || '%')`;
+          if (searchColumn === 'Status') return `WHERE ($${paramIndex} = '' OR (CASE WHEN u.status = 1 THEN 'active' ELSE 'inactive' END) ILIKE '%' || $${paramIndex} || '%')`;
+          if (searchColumn === 'Age') return `WHERE ($${paramIndex} = '' OR CAST(u.age AS TEXT) ILIKE '%' || $${paramIndex} || '%')`;
+          
+          return `
+            WHERE (
+              $${paramIndex} = ''
+              OR u.full_name ILIKE '%' || $${paramIndex} || '%'
+              OR u.email ILIKE '%' || $${paramIndex} || '%'
+              OR u.phone ILIKE '%' || $${paramIndex} || '%'
+              OR u.university ILIKE '%' || $${paramIndex} || '%'
+              OR u.school_name ILIKE '%' || $${paramIndex} || '%'
+              OR u.degree ILIKE '%' || $${paramIndex} || '%'
+            )
+          `;
+        };
 
         const query = `
           SELECT 
@@ -90,15 +114,7 @@ export default async function handler(req, res) {
           LEFT JOIN "Role" r
           ON u.role_id = r.role_id
 
-          WHERE (
-            $3 = ''
-            OR u.full_name ILIKE '%' || $3 || '%'
-            OR u.email ILIKE '%' || $3 || '%'
-            OR u.phone ILIKE '%' || $3 || '%'
-            OR u.university ILIKE '%' || $3 || '%'
-            OR u.school_name ILIKE '%' || $3 || '%'
-            OR u.degree ILIKE '%' || $3 || '%'
-          )
+          ${buildWhereClause(3)}
 
           ORDER BY u.created_at DESC
 
@@ -108,25 +124,42 @@ export default async function handler(req, res) {
         const countQuery = `
           SELECT COUNT(*)
 
-          FROM "User"
+          FROM "User" u
 
-          WHERE (
-            $1 = ''
-            OR full_name ILIKE '%' || $1 || '%'
-            OR email ILIKE '%' || $1 || '%'
-            OR phone ILIKE '%' || $1 || '%'
-            OR university ILIKE '%' || $1 || '%'
-            OR school_name ILIKE '%' || $1 || '%'
-            OR degree ILIKE '%' || $1 || '%'
-          )
+          LEFT JOIN "Role" r
+          ON u.role_id = r.role_id
+
+          ${buildWhereClause(1)}
         `;
 
-        const [result, countResult] = await Promise.all([
+         const statsQuery = `
+  SELECT
+    COUNT(*) FILTER (
+      WHERE u.role_id = 1
+    ) AS admins,
+
+    COUNT(*) FILTER (
+      WHERE u.role_id = 2
+    ) AS school_students,
+
+    COUNT(*) FILTER (
+      WHERE u.role_id IN (3, 4)
+    ) AS college_students
+
+  FROM "User" u
+`;
+        const [result, countResult, statsResult] = await Promise.all([
           pool.query(query, [limit, offset, search]),
           pool.query(countQuery, [search]),
+          pool.query(statsQuery),
         ]);
 
         const total = parseInt(countResult.rows[0].count);
+        const stats = {
+          admins: parseInt(statsResult.rows[0].admins || 0),
+          schoolStudents: parseInt(statsResult.rows[0].school_students || 0),
+          collegeStudents: parseInt(statsResult.rows[0].college_students || 0),
+        };
 
         return res.status(200).json({
           success: true,
@@ -135,6 +168,7 @@ export default async function handler(req, res) {
           limit: parseInt(limit),
           total,
           totalPages: Math.ceil(total / limit),
+          stats,
           data: result.rows,
         });
       }
