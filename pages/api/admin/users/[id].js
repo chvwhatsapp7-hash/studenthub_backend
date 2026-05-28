@@ -13,7 +13,7 @@ export default async function handler(req, res) {
   if (req.method === "PATCH") {
     try {
       const { id } = req.query;
-      const { status, role_id } = req.body;
+      const { status, role_id, is_deleted } = req.body;
       
       const user_id = parseInt(id, 10);
       if (isNaN(user_id)) {
@@ -35,6 +35,11 @@ export default async function handler(req, res) {
         values.push(role_id);
       }
 
+      if (is_deleted !== undefined) {
+        updateFields.push(`is_deleted = $${index++}`);
+        values.push(is_deleted);
+      }
+
       if (updateFields.length === 0) {
         return res.status(400).json({ success: false, message: "No fields to update" });
       }
@@ -45,7 +50,7 @@ export default async function handler(req, res) {
         UPDATE "User"
         SET ${updateFields.join(", ")}, updated_at = NOW()
         WHERE user_id = $${index}
-        RETURNING user_id, status, role_id
+        RETURNING user_id, status, role_id, is_deleted
       `;
 
       const result = await pool.query(query, values);

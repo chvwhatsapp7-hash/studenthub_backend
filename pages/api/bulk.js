@@ -38,17 +38,18 @@ export default async function handler(req, res) {
       if (type === "users") {
 
         const buildWhereClause = (paramIndex) => {
-          if (searchColumn === 'Name') return `WHERE ($${paramIndex} = '' OR u.full_name ILIKE '%' || $${paramIndex} || '%')`;
-          if (searchColumn === 'Email') return `WHERE ($${paramIndex} = '' OR u.email ILIKE '%' || $${paramIndex} || '%')`;
-          if (searchColumn === 'Phone') return `WHERE ($${paramIndex} = '' OR u.phone ILIKE '%' || $${paramIndex} || '%')`;
-          if (searchColumn === 'Institution') return `WHERE ($${paramIndex} = '' OR u.university ILIKE '%' || $${paramIndex} || '%' OR u.school_name ILIKE '%' || $${paramIndex} || '%')`;
-          if (searchColumn === 'Degree/Class') return `WHERE ($${paramIndex} = '' OR u.degree ILIKE '%' || $${paramIndex} || '%' OR u.class ILIKE '%' || $${paramIndex} || '%')`;
-          if (searchColumn === 'Role') return `WHERE ($${paramIndex} = '' OR r.role_name ILIKE '%' || $${paramIndex} || '%')`;
-          if (searchColumn === 'Status') return `WHERE ($${paramIndex} = '' OR (CASE WHEN u.status = 1 THEN 'active' ELSE 'inactive' END) ILIKE '%' || $${paramIndex} || '%')`;
-          if (searchColumn === 'Age') return `WHERE ($${paramIndex} = '' OR CAST(u.age AS TEXT) ILIKE '%' || $${paramIndex} || '%')`;
+          const baseCondition = `(u.is_deleted IS NOT TRUE OR u.is_deleted IS NULL)`;
+          if (searchColumn === 'Name') return `WHERE ${baseCondition} AND ($${paramIndex} = '' OR u.full_name ILIKE '%' || $${paramIndex} || '%')`;
+          if (searchColumn === 'Email') return `WHERE ${baseCondition} AND ($${paramIndex} = '' OR u.email ILIKE '%' || $${paramIndex} || '%')`;
+          if (searchColumn === 'Phone') return `WHERE ${baseCondition} AND ($${paramIndex} = '' OR u.phone ILIKE '%' || $${paramIndex} || '%')`;
+          if (searchColumn === 'Institution') return `WHERE ${baseCondition} AND ($${paramIndex} = '' OR u.university ILIKE '%' || $${paramIndex} || '%' OR u.school_name ILIKE '%' || $${paramIndex} || '%')`;
+          if (searchColumn === 'Degree/Class') return `WHERE ${baseCondition} AND ($${paramIndex} = '' OR u.degree ILIKE '%' || $${paramIndex} || '%' OR u.class ILIKE '%' || $${paramIndex} || '%')`;
+          if (searchColumn === 'Role') return `WHERE ${baseCondition} AND ($${paramIndex} = '' OR r.role_name ILIKE '%' || $${paramIndex} || '%')`;
+          if (searchColumn === 'Status') return `WHERE ${baseCondition} AND ($${paramIndex} = '' OR (CASE WHEN u.status = 1 THEN 'active' ELSE 'inactive' END) ILIKE '%' || $${paramIndex} || '%')`;
+          if (searchColumn === 'Age') return `WHERE ${baseCondition} AND ($${paramIndex} = '' OR CAST(u.age AS TEXT) ILIKE '%' || $${paramIndex} || '%')`;
           
           return `
-            WHERE (
+            WHERE ${baseCondition} AND (
               $${paramIndex} = ''
               OR u.full_name ILIKE '%' || $${paramIndex} || '%'
               OR u.email ILIKE '%' || $${paramIndex} || '%'
