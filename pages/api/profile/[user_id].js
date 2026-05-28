@@ -3,9 +3,13 @@ import { cors } from "../../../lib/cors";
 import { authenticate } from "../../../lib/auth";
 
 export default async function handler(req, res) {
+
+  console.log("PROFILE API HIT");
+
   if (cors(req, res)) return;
 
   const user = authenticate(req, res);
+
   if (!user) {
     return res.status(401).json({
       success: false,
@@ -14,19 +18,50 @@ export default async function handler(req, res) {
   }
 
   try {
+
     const { user_id } = req.query;
 
     // ================= GET PROFILE =================
     if (req.method === "GET") {
 
       const userResult = await pool.query(
-        `SELECT user_id, full_name, email, phone, university, degree,
-                graduation_year, resume_url, linkedin_url, github_url,
-                about_me, address, age, created_at
-         FROM "User"
-         WHERE user_id = $1`,
+        `
+        SELECT 
+          u.user_id,
+          u.full_name,
+          u.email,
+          u.phone,
+          u.university,
+          u.degree,
+          u.graduation_year,
+          u.resume_url,
+          u.linkedin_url,
+          u.github_url,
+          u.about_me,
+          u.address,
+          u.age,
+          u.created_at,
+          u.updated_at,
+
+          CAST(u.role_id AS INTEGER) AS role_id,
+          r.role_name,
+
+          CASE
+            WHEN u.status = 1 THEN 'active'
+            ELSE 'inactive'
+          END AS status
+
+        FROM "User" u
+
+        LEFT JOIN "Role" r
+        ON u.role_id = r.role_id
+
+        WHERE u.user_id = $1
+        `,
         [user_id]
       );
+
+      console.log("USER RESULT:", userResult.rows[0]);
 
       if (userResult.rows.length === 0) {
         return res.status(404).json({
@@ -37,35 +72,70 @@ export default async function handler(req, res) {
 
       const userData = userResult.rows[0];
 
+      console.log("ROLE ID FROM DB:", userData.role_id);
+      console.log("ROLE NAME FROM DB:", userData.role_name);
+
       // ===== SKILLS =====
       const skillsResult = await pool.query(
-        `SELECT s.skill_id, s.name, us.proficiency
-         FROM "UserSkill" us
-         JOIN "Skill" s ON s.skill_id = us.skill_id
-         WHERE us.user_id = $1`,
+        `
+        SELECT 
+          s.skill_id,
+          s.name,
+          us.proficiency
+
+        FROM "UserSkill" us
+
+        JOIN "Skill" s
+        ON s.skill_id = us.skill_id
+
+        WHERE us.user_id = $1
+        `,
         [user_id]
       );
 
       // ===== CERTIFICATES =====
       const certResult = await pool.query(
-        `SELECT certificate_id, title, issuer, issue_date, file_url
-         FROM "Certificate"
-         WHERE user_id = $1`,
+        `
+        SELECT
+          certificate_id,
+          title,
+          issuer,
+          issue_date,
+          file_url
+
+        FROM "Certificate"
+
+        WHERE user_id = $1
+        `,
         [user_id]
       );
 
       // ===== PROJECTS =====
       const projectsResult = await pool.query(
-        `SELECT p.project_id, p.title, p.description,
-                COALESCE(
-                  json_agg(s.name) FILTER (WHERE s.name IS NOT NULL),
-                  '[]'
-                ) AS skills
-         FROM "Project" p
-         LEFT JOIN "ProjectSkill" ps ON ps.project_id = p.project_id
-         LEFT JOIN "Skill" s ON s.skill_id = ps.skill_id
-         WHERE p.user_id = $1
-         GROUP BY p.project_id`,
+        `
+        SELECT
+          p.project_id,
+          p.title,
+          p.description,
+
+          COALESCE(
+            json_agg(s.name)
+            FILTER (WHERE s.name IS NOT NULL),
+            '[]'
+          ) AS skills
+
+        FROM "Project" p
+
+        LEFT JOIN "ProjectSkill" ps
+        ON ps.project_id = p.project_id
+
+        LEFT JOIN "Skill" s
+        ON s.skill_id = ps.skill_id
+
+        WHERE p.user_id = $1
+
+        GROUP BY p.project_id
+        `,
         [user_id]
       );
 
@@ -86,9 +156,11 @@ export default async function handler(req, res) {
         success: true,
         data: {
           ...userData,
+
           skills: skillsResult.rows,
           certificates: certResult.rows,
           projects: projectsResult.rows,
+
           profile_strength: score
         }
       });
@@ -135,7 +207,9 @@ export default async function handler(req, res) {
           address = COALESCE($10, address),
           age = COALESCE($11, age),
           updated_at = NOW()
+
         WHERE user_id = $12
+
         RETURNING *
         `,
         [
@@ -175,6 +249,7 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
+
     console.error("PROFILE ERROR:", err);
 
     return res.status(500).json({
